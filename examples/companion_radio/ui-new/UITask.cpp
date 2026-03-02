@@ -137,6 +137,7 @@
 
 #include "icons.h"
 #include "meshcore_logo_color.h"
+#include "mesh_touch_splash.h"
 
 // 16x16 tactical icons
 static const uint8_t icon_home_16[] = { 0x00,0x00,0x80,0x01,0xc0,0x03,0xe0,0x07,0x70,0x0e,0x38,0x1c,0xfc,0x3f,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0xf8,0x1f,0x00,0x00,0x00,0x00,0x00,0x00 };
@@ -188,14 +189,14 @@ class SplashScreen : public UIScreen {
       else if (progress > 0.5f) textC = DisplayDriver::SLATE_GREY;
       else if (progress > 0.2f) textC = DisplayDriver::DARK_GREY;
 
-      // Centered and scaled full-color logo (80% screen height)
+      // 80% centered splash
       if (progress > 0.1f) {
-        float scale = 1.4f; 
-        int tw = (int)(meshcore_color_logo_width * scale);
-        int th = (int)(meshcore_color_logo_height * scale);
-        int tx = (sw - tw) / 2;
-        int ty = (sh - th) / 2;
-        display.drawRGBBitmapScaled(tx, ty, meshcore_color_logo, meshcore_color_logo_width, meshcore_color_logo_height, scale);
+        display.drawRGBBitmapScaled(sw / 2 - (mesh_touch_splash_width * 0.8f) / 2, 
+                                   sh / 2 - (mesh_touch_splash_height * 0.8f) / 2, 
+                                   mesh_touch_splash, 
+                                   mesh_touch_splash_width, 
+                                   mesh_touch_splash_height, 
+                                   0.8f);
       }
 
       display.setColor(DisplayDriver::DARK);
@@ -464,10 +465,11 @@ private:
     display.setColor(DisplayDriver::DARK);
     display.fillRect(x, _list_y, w, panel_h);
 
-    // Node name
+    // Node name - moved up slightly
     display.setColor(DisplayDriver::NEON_CYAN);
-    display.setTextSize(1);
+    display.setTextSize(2);
     display.drawTextCentered(x + w / 2, _list_y + 2, the_mesh.getNodeName());
+    display.setTextSize(1);
 
     // 1. Large Clock
     uint32_t now = _rtc->getCurrentTime();
@@ -1063,16 +1065,16 @@ private:
 
     int max_visible = 5;
     int ch_h = 24;
-    int btn_area_w = 40;
+    int btn_area_w = 50;
     int list_w = dw - btn_area_w - 6;
 
     // Up scroll (top right)
     bool can_up = (_dropdown_scroll > 0);
-    drawButton(display, dx + dw - btn_area_w - 2, dy + 2, btn_area_w, 40, "^", can_up);
+    drawButton(display, dx + dw - btn_area_w, dy + 2, btn_area_w, 40, "^", can_up);
 
     // Down scroll (bottom right)
     bool can_down = (_dropdown_scroll + max_visible < total_channels);
-    drawButton(display, dx + dw - btn_area_w - 2, dy + total_h - 42, btn_area_w, 40, "v", can_down);
+    drawButton(display, dx + dw - btn_area_w, dy + total_h - 42, btn_area_w, 40, "v", can_down);
 
     // Channel entries
     for (int i = 0; i < max_visible; i++) {
@@ -1292,7 +1294,10 @@ private:
             case 10: {
                 struct timeval tv;
                 gettimeofday(&tv, NULL);
-                snprintf(val, sizeof(val), "%llu", (unsigned long long)tv.tv_sec);
+                time_t now = tv.tv_sec;
+                struct tm ti;
+                gmtime_r(&now, &ti);
+                snprintf(val, sizeof(val), "%02d:%02d", ti.tm_hour, ti.tm_min);
                 break;
             }
             case 11: snprintf(val, sizeof(val), "%.5f", _sensors->node_lat); break;
@@ -1602,11 +1607,13 @@ public:
                 _is_dashboard = true;
                 _keyboard_visible = false;
                 _num_input_visible = false;
+                _editing_node_name = false;
             } else {
                 _tab = t;
                 _is_dashboard = false;
                 _keyboard_visible = false;
                 _num_input_visible = false;
+                _editing_node_name = false;
                 _show_msg_detail = false;
             }
         }
@@ -1654,7 +1661,7 @@ public:
             if (isInRect(x, y, 250, bottom_y, 65, kh)) {
                 // SEND / OK
                 if (_editing_node_name) {
-                    strncpy(_node_prefs->node_name, _chat_draft, sizeof(_node_prefs->node_name));
+                    StrHelper::strzcpy(_node_prefs->node_name, _chat_draft, sizeof(_node_prefs->node_name));
                     the_mesh.savePrefs();
                     _editing_node_name = false;
                     _keyboard_visible = false;
@@ -1867,12 +1874,12 @@ public:
           int dy = _list_y + 26;
           int dw = _content_w - 20;
           int total_h = 135;
-          int btn_area_w = 40;
+          int btn_area_w = 50;
           int ch_h = 24;
           int max_visible = 5;
 
-          // Scroll Buttons
-          int btn_x = dx + dw - btn_area_w - 2;
+          // Scroll Buttons (Larger and further right)
+          int btn_x = dx + dw - btn_area_w;
           if (isInRect(x, y, btn_x, dy, btn_area_w, 45)) {
               if (_dropdown_scroll > 0) _dropdown_scroll--;
               return true;

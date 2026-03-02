@@ -1,0 +1,98 @@
+Processing heltec_v4_tft_touch_companion_radio_ble (board: heltec_v4; platform: platformio/espressif32@6.11.0; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/heltec_v4.html
+PLATFORM: Espressif 32 (6.11.0) > heltec_wifi_lora_32 v4 (16 MB FLASH, 2 MB PSRAM)
+HARDWARE: ESP32S3 240MHz, 2MB RAM, 16MB Flash
+DEBUG: Current (esp-builtin) On-board (esp-builtin) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 1.40501.0 (4.5.1) 
+ - toolchain-riscv32-esp @ 8.4.0+2021r2-patch5 
+ - toolchain-xtensa-esp32s3 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 67 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- SPI @ 2.0.0
+|-- Wire @ 2.0.0
+|-- RadioLib @ 7.6.0
+|-- Crypto @ 0.4.0
+|-- RTClib @ 2.1.4
+|-- Melopero RV3028 @ 1.2.0
+|-- CayenneLPP @ 1.6.1
+|-- Adafruit INA3221 Library @ 1.0.1
+|-- Adafruit INA219 @ 1.2.3
+|-- INA226 @ 0.6.6
+|-- Adafruit INA260 Library @ 1.5.3
+|-- Adafruit AHTX0 @ 2.0.6
+|-- Adafruit BME280 Library @ 2.3.0
+|-- Adafruit BMP280 Library @ 2.6.8
+|-- Adafruit SHTC3 Library @ 1.0.2
+|-- Sensirion I2C SHT4x @ 1.1.2
+|-- Arduino_LPS22HB @ 1.0.2
+|-- Adafruit MLX90614 Library @ 2.1.6
+|-- Adafruit_VL53L0X @ 1.2.5
+|-- MicroNMEA @ 2.0.6
+|-- Adafruit BME680 Library @ 2.0.6
+|-- Adafruit BMP085 Library @ 1.2.4
+|-- Adafruit ST7735 and ST7789 Library @ 1.11.0
+|-- base64 @ 1.4.0
+|-- XPT2046_Touchscreen @ 1.4.0+sha.f956c5d
+|-- LittleFS @ 2.0.0
+|-- SPIFFS @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- ed25519
+|-- nrf52
+|-- ESP32 BLE Arduino @ 2.0.0
+|-- FS @ 2.0.0
+|-- Adafruit GFX Library @ 1.12.5
+Building in release mode
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\examples\companion_radio\ui-new\UITask.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_gfsk.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_lora.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_misc.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_ook.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_oqpsk.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_radio.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_cmds_ranging.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\LR2021\LR2021_config.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\RF69\RF69.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX123x\SX1231.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX123x\SX1233.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX126x\STM32WLx.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX126x\STM32WLx_Module.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX126x\SX1261.cpp.o
+Compiling .pio\build\heltec_v4_tft_touch_companion_radio_ble\lib9d5\RadioLib\modules\SX126x\SX1262.cpp.o
+pio : examples/companion_radio/ui-new/UITask.cpp: In member function 'virtual bool HomeScreen::handleTouch(int, int)':
+At line:1 char:1
++ pio run -e heltec_v4_tft_touch_companion_radio_ble 2>&1 | Out-File -F ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (examples/compan...uch(int, int)'::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+examples/companion_radio/ui-new/UITask.cpp:1878:33: error: 'btn_area_w' was not declared in this scope
+           int btn_x = dx + dw - btn_area_w;
+                                 ^~~~~~~~~~
+examples/companion_radio/ui-new/UITask.cpp:1889:31: error: 'max_visible' was not declared in this scope
+           for (int i = 0; i < max_visible; i++) {
+                               ^~~~~~~~~~~
+examples/companion_radio/ui-new/UITask.cpp:1889:31: note: suggested alternative: 'dacDisable'
+           for (int i = 0; i < max_visible; i++) {
+                               ^~~~~~~~~~~
+                               dacDisable
+examples/companion_radio/ui-new/UITask.cpp:1890:37: error: 'ch_h' was not declared in this scope
+               int iy = dy + 6 + i * ch_h;
+                                     ^~~~
+examples/companion_radio/ui-new/UITask.cpp:1890:37: note: suggested alternative: 'cosh'
+               int iy = dy + 6 + i * ch_h;
+                                     ^~~~
+                                     cosh
+*** [.pio\build\heltec_v4_tft_touch_companion_radio_ble\examples\companion_radio\ui-new\UITask.cpp.o] Error 1
+========================= [FAILED] Took 12.37 seconds =========================
+
+Environment                              Status    Duration
+---------------------------------------  --------  ------------
+heltec_v4_tft_touch_companion_radio_ble  FAILED    00:00:12.370
+==================== 1 failed, 0 succeeded in 00:00:12.370 ====================
