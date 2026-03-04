@@ -908,9 +908,11 @@ private:
 
       display.setColor(DisplayDriver::LIGHT);
       display.drawTextEllipsized(x + 6, y + 4, max_name_w, filtered_name);
-      // Hop count in cyan in the middle
+
+      // Hop count moved to the right
       display.setColor(DisplayDriver::NEON_CYAN);
-      display.drawTextCentered(x + list_w / 2, y + 4, hops_str);
+      display.drawTextRightAlign(x + list_w - age_w - 12, y + 4, hops_str);
+
       display.setColor(DisplayDriver::LIGHT);
       display.drawTextRightAlign(x + list_w - 4, y + 4, age);
     }
@@ -984,6 +986,7 @@ private:
     int num_matching = 0;
     int total_height = 0;
 
+    int skip = _chat_scroll;
     int bubble_max_w = w - sbtn_w - 20; // 20px padding from edges
     if (bubble_max_w < 100) bubble_max_w = 100;
     int text_max_w = bubble_max_w - 12; // padding inside bubble
@@ -1003,8 +1006,8 @@ private:
       }
 
       if (match) {
-        if (_chat_scroll > 0) {
-          _chat_scroll--; // skip this message
+        if (skip > 0) {
+          skip--; // skip this message
           continue;
         }
 
@@ -2254,7 +2257,7 @@ public:
 
       // Scroll UP button
       if (isInRect(x, y, btn_x, hist_y, _scroll_btn_w, sbtn_h)) {
-        if (_chat_scroll < total) _chat_scroll++;
+        if (_chat_scroll < total && total > 0) _chat_scroll++;
         return true;
       }
 
