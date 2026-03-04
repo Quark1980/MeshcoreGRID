@@ -81,6 +81,7 @@ For developers who want to customize or contribute to the project:
 
 ## 🚀 Software Features
 
+- **Updated Icon Pack (March 2026)**: New high-contrast symbols for better legibility at all scales.
 - **Custom Icons**: High-resolution 64x64 RGB565 icons.
 - **Module Navigation**:
   - **CLOCK**: Time and date display.
