@@ -59,13 +59,19 @@ To get your Heltec V4 working with a 2.4" or 2.8" SPI TFT (ST7789) and Touch (XP
 3. **Power (3.3V)**: Connect the `VCC` of both the TFT and Touch to the Heltec's `3.3V` or `VEXT` pin. If using `VEXT`, ensure your code or configuration enables the external power rail.
 4. **Backlight**: The code expects the backlight to be hardwired or managed. For Heltec V4, ensure your ground connections are solid to avoid flicker.
 
-## 📱 Premium Touch UI
-The "TOUCH" edition features a high-performance, lower-flicker UI with:
-- **Full QWERTY Keyboard**: compose messages directly on-screen.
-- **Dynamic Splash**: A beautiful full-screen startup (touch.png).
-- **8-Tab Navigation**: Quick access to Home, Chat, Nodes, Radio, Config, and more.
-- **Node Persistence**: Stable node name configuration that persists across restarts.
-- **Interactive Channels**: Easily switch between group channels and private contacts.
+## 📱 Premium Tactical Touch UI
+The "TOUCH" edition features a high-performance, low-flicker UI designed for mission-critical reliability:
+- **3-Icon Carousel Navigation**: Fluent, touch-friendly carousel with large PREV/NEXT buttons for easy selection.
+- **Premium Aesthetics**: Rugged square app icons with 10px rounded borders and high-contrast "Neon Cyan" accents.
+- **Tactical Status Bar**: 
+  - **✉ Unread Messages**: Real-time counter for incoming channel and direct messages.
+  - **⛫ Node Discovery**: Dynamic counter showing active nodes heard in the mesh.
+  - **⚡ Power Intel**: Accurate battery percentage and voltage (V:x.xx) display.
+- **Instant Responsiveness**: Fixed touch-hang issues and optimized redraw logic for an "always-ready" interface.
+- **Full QWERTY Keyboard**: Compose and send encrypted messages directly on-screen.
+- **Auto-Dismiss Splash**: Startup splash screen automatically transitions to the launcher after 5 seconds.
+- **Power Efficiency**: Intelligent backlight management and optional manual-wake notifications to maximize battery life.
+- **Node Persistence**: Secure, on-board storage for node names and mesh preferences.
 
 ---
 *Created by Quark1980 & The MeshCore Community*

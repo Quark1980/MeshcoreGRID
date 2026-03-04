@@ -1,20 +1,30 @@
 #include "UITask.h"
-#include <helpers/TxtDataHelpers.h>
-#include <sys/time.h>
+
+#include "../../../src/helpers/TxtDataHelpers.h"
+#include "../../../src/helpers/ui/DisplayDriver.h"
+#include "../../../src/helpers/ui/UIScreen.h"
 #include "../MyMesh.h"
 #include "target.h"
-#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && defined(TOUCH_SPI_MISO)
-  #include <SPI.h>
-  #include <XPT2046_Touchscreen.h>
+
+#include <Arduino.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/time.h>
+#include <time.h>
+
+#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && \
+    defined(TOUCH_SPI_MISO)
+#include <SPI.h>
+#include <XPT2046_Touchscreen.h>
 #endif
 #ifdef WIFI_SSID
-  #include <WiFi.h>
+#include <WiFi.h>
 #endif
 
 #ifndef AUTO_OFF_MILLIS
-  #define AUTO_OFF_MILLIS     15000   // 15 seconds
+#define AUTO_OFF_MILLIS 15000 // 15 seconds
 #endif
-#define BOOT_SCREEN_MILLIS   3000   // 3 seconds
+#define BOOT_SCREEN_MILLIS 3000 // 3 seconds
 
 #ifdef PIN_STATUS_LED
 #define LED_ON_MILLIS     20
@@ -22,117 +32,118 @@
 #define LED_CYCLE_MILLIS  4000
 #endif
 
-#define LONG_PRESS_MILLIS   1200
+#define LONG_PRESS_MILLIS 1200
 
 #ifndef UI_RECENT_LIST_SIZE
-  #define UI_RECENT_LIST_SIZE 4
+#define UI_RECENT_LIST_SIZE 4
 #endif
 
 #if UI_HAS_JOYSTICK
-  #define PRESS_LABEL "press Enter"
+#define PRESS_LABEL "press Enter"
 #else
-  #define PRESS_LABEL "long press"
+#define PRESS_LABEL "long press"
 #endif
 
-#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && defined(TOUCH_SPI_MISO)
-  #ifndef TOUCH_ROTATION
-    #define TOUCH_ROTATION 1
-  #endif
-  #ifndef TOUCH_X_MIN
-    #define TOUCH_X_MIN 200
-  #endif
-  #ifndef TOUCH_X_MAX
-    #define TOUCH_X_MAX 3900
-  #endif
-  #ifndef TOUCH_Y_MIN
-    #define TOUCH_Y_MIN 200
-  #endif
-  #ifndef TOUCH_Y_MAX
-    #define TOUCH_Y_MAX 3900
-  #endif
-  #ifndef TOUCH_DOT_MILLIS
-    #define TOUCH_DOT_MILLIS 220
-  #endif
+#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && \
+    defined(TOUCH_SPI_MISO)
+#ifndef TOUCH_ROTATION
+#define TOUCH_ROTATION 1
+#endif
+#ifndef TOUCH_X_MIN
+#define TOUCH_X_MIN 200
+#endif
+#ifndef TOUCH_X_MAX
+#define TOUCH_X_MAX 3900
+#endif
+#ifndef TOUCH_Y_MIN
+#define TOUCH_Y_MIN 200
+#endif
+#ifndef TOUCH_Y_MAX
+#define TOUCH_Y_MAX 3900
+#endif
+#ifndef TOUCH_DOT_MILLIS
+#define TOUCH_DOT_MILLIS 220
+#endif
 
-  static SPIClass xpt2046_spi(HSPI);
-  static XPT2046_Touchscreen xpt2046(TOUCH_CS, TOUCH_IRQ);
-  static bool xpt2046_ready = false;
-  static bool xpt2046_was_down = false;
-  static uint32_t xpt2046_last_tap_millis = 0;
-  static int touch_dot_x = -1;
-  static int touch_dot_y = -1;
-  static uint32_t touch_dot_until = 0;
+static SPIClass xpt2046_spi(HSPI);
+static XPT2046_Touchscreen xpt2046(TOUCH_CS, TOUCH_IRQ);
+static bool xpt2046_ready = false;
+static bool xpt2046_was_down = false;
+static uint32_t xpt2046_last_tap_millis = 0;
+static int touch_dot_x = -1;
+static int touch_dot_y = -1;
+static uint32_t touch_dot_until = 0;
 
-  static float normalizeTouchAxis(int raw, int in_min, int in_max) {
-    if (in_min == in_max) return 0.0f;
-    float n = (float)(raw - in_min) / (float)(in_max - in_min);
-    if (n < 0.0f) n = 0.0f;
-    if (n > 1.0f) n = 1.0f;
-    return n;
+static float normalizeTouchAxis(int raw, int in_min, int in_max) {
+  if (in_min == in_max) return 0.0f;
+  float n = (float)(raw - in_min) / (float)(in_max - in_min);
+  if (n < 0.0f) n = 0.0f;
+  if (n > 1.0f) n = 1.0f;
+  return n;
+}
+
+static void mapRawTouchToDisplay(DisplayDriver *display, int raw_x, int raw_y, int *x, int *y) {
+  if (display == NULL) {
+    *x = 0;
+    *y = 0;
+    return;
   }
 
-  static void mapRawTouchToDisplay(DisplayDriver* display, int raw_x, int raw_y, int* x, int* y) {
-    if (display == NULL) {
-      *x = 0;
-      *y = 0;
-      return;
-    }
+  float u = normalizeTouchAxis(raw_x, TOUCH_X_MIN, TOUCH_X_MAX);
+  float v = normalizeTouchAxis(raw_y, TOUCH_Y_MIN, TOUCH_Y_MAX);
 
-    float u = normalizeTouchAxis(raw_x, TOUCH_X_MIN, TOUCH_X_MAX);
-    float v = normalizeTouchAxis(raw_y, TOUCH_Y_MIN, TOUCH_Y_MAX);
+  // Rotate touch frame by 90 degrees clockwise.
+  float u_rot = v;
+  float v_rot = 1.0f - u;
 
-    // Rotate touch frame by 90 degrees clockwise.
-    float u_rot = v;
-    float v_rot = 1.0f - u;
+  int max_x = display->width() - 1;
+  int max_y = display->height() - 1;
+  *x = (int)(u_rot * max_x + 0.5f);
+  *y = (int)(v_rot * max_y + 0.5f);
 
-    int max_x = display->width() - 1;
-    int max_y = display->height() - 1;
-    *x = (int)(u_rot * max_x + 0.5f);
-    *y = (int)(v_rot * max_y + 0.5f);
+  if (*x < 0) *x = 0;
+  if (*x > max_x) *x = max_x;
+  if (*y < 0) *y = 0;
+  if (*y > max_y) *y = max_y;
+}
 
-    if (*x < 0) *x = 0;
-    if (*x > max_x) *x = max_x;
-    if (*y < 0) *y = 0;
-    if (*y > max_y) *y = max_y;
-  }
+static char mapXpt2046TouchToKey(DisplayDriver *display, int raw_x, int raw_y) {
+  if (display == NULL) return KEY_NEXT;
+  int x = 0, y = 0;
+  mapRawTouchToDisplay(display, raw_x, raw_y, &x, &y);
+  int left_cutoff = display->width() / 3;
+  int right_cutoff = (display->width() * 2) / 3;
+  if (x < left_cutoff) return KEY_PREV;
+  if (x > right_cutoff) return KEY_NEXT;
+  return KEY_ENTER;
+}
 
-  static char mapXpt2046TouchToKey(DisplayDriver* display, int raw_x, int raw_y) {
-    if (display == NULL) return KEY_NEXT;
-    int x = 0, y = 0;
-    mapRawTouchToDisplay(display, raw_x, raw_y, &x, &y);
-    int left_cutoff = display->width() / 3;
-    int right_cutoff = (display->width() * 2) / 3;
-    if (x < left_cutoff) return KEY_PREV;
-    if (x > right_cutoff) return KEY_NEXT;
-    return KEY_ENTER;
-  }
+static void updateTouchDot(DisplayDriver *display, int raw_x, int raw_y) {
+  if (display == NULL) return;
+  mapRawTouchToDisplay(display, raw_x, raw_y, &touch_dot_x, &touch_dot_y);
+  touch_dot_until = millis() + TOUCH_DOT_MILLIS;
+}
 
-  static void updateTouchDot(DisplayDriver* display, int raw_x, int raw_y) {
-    if (display == NULL) return;
-    mapRawTouchToDisplay(display, raw_x, raw_y, &touch_dot_x, &touch_dot_y);
-    touch_dot_until = millis() + TOUCH_DOT_MILLIS;
-  }
+static void drawTouchDotPixel(DisplayDriver &display, int x, int y) {
+  if (x < 0 || y < 0 || x >= display.width() || y >= display.height()) return;
+  display.fillRect(x, y, 1, 1);
+}
 
-  static void drawTouchDotPixel(DisplayDriver& display, int x, int y) {
-    if (x < 0 || y < 0 || x >= display.width() || y >= display.height()) return;
-    display.fillRect(x, y, 1, 1);
-  }
+static void drawTouchDebugDot(DisplayDriver &display) {
+  if ((int32_t)(touch_dot_until - millis()) <= 0) return;
+  if (touch_dot_x < 0 || touch_dot_y < 0) return;
 
-  static void drawTouchDebugDot(DisplayDriver& display) {
-    if ((int32_t)(touch_dot_until - millis()) <= 0) return;
-    if (touch_dot_x < 0 || touch_dot_y < 0) return;
-
-    display.setColor(DisplayDriver::LIGHT);
-    drawTouchDotPixel(display, touch_dot_x, touch_dot_y - 2);
-    drawTouchDotPixel(display, touch_dot_x + 1, touch_dot_y - 1);
-    drawTouchDotPixel(display, touch_dot_x + 2, touch_dot_y);
-    drawTouchDotPixel(display, touch_dot_x + 1, touch_dot_y + 1);
-    drawTouchDotPixel(display, touch_dot_x, touch_dot_y + 2);
-    drawTouchDotPixel(display, touch_dot_x - 1, touch_dot_y + 1);
-    drawTouchDotPixel(display, touch_dot_x - 2, touch_dot_y);
-    drawTouchDotPixel(display, touch_dot_x - 1, touch_dot_y - 1);
-    drawTouchDotPixel(display, touch_dot_x, touch_dot_y);
-  }
+  display.setColor(DisplayDriver::LIGHT);
+  drawTouchDotPixel(display, touch_dot_x, touch_dot_y - 2);
+  drawTouchDotPixel(display, touch_dot_x + 1, touch_dot_y - 1);
+  drawTouchDotPixel(display, touch_dot_x + 2, touch_dot_y);
+  drawTouchDotPixel(display, touch_dot_x + 1, touch_dot_y + 1);
+  drawTouchDotPixel(display, touch_dot_x, touch_dot_y + 2);
+  drawTouchDotPixel(display, touch_dot_x - 1, touch_dot_y + 1);
+  drawTouchDotPixel(display, touch_dot_x - 2, touch_dot_y);
+  drawTouchDotPixel(display, touch_dot_x - 1, touch_dot_y - 1);
+  drawTouchDotPixel(display, touch_dot_x, touch_dot_y);
+}
 #endif
 
 #include "icons.h"
@@ -140,70 +151,97 @@
 #include "touch_splash.h"
 
 // 16x16 tactical icons
-static const uint8_t icon_home_16[] = { 0x00,0x00,0x80,0x01,0xc0,0x03,0xe0,0x07,0x70,0x0e,0x38,0x1c,0xfc,0x3f,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0x18,0xf8,0x1f,0x00,0x00,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_chat_16[] = { 0x00,0x00,0xfe,0x7f,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0xfe,0x7f,0x00,0x0c,0x00,0x18,0x00,0x30,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_map_16[] = { 0x80,0x01,0xc0,0x03,0xe0,0x07,0x70,0x0e,0x38,0x1c,0x1c,0x38,0x0e,0x70,0x07,0xe0,0x0e,0x70,0x1c,0x38,0x38,0x1c,0x70,0x0e,0xe0,0x07,0xc0,0x03,0x80,0x01,0x00,0x00 };
-static const uint8_t icon_nodes_16[] = { 0x00,0x00,0x0c,0x30,0x1e,0x78,0x1e,0x78,0x0c,0x30,0x00,0x00,0x0c,0x30,0x1e,0x78,0x1e,0x78,0x0c,0x30,0x00,0x00,0x0c,0x30,0x1e,0x78,0x1e,0x78,0x0c,0x30,0x00,0x00 };
-static const uint8_t icon_radio_16[] = { 0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0xff,0xff,0x80,0x01,0x80,0x01,0x3c,0x3c,0x42,0x42,0x81,0x81,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_settings_16[] = { 0x00,0x30,0x18,0x18,0x3c,0x3c,0x7e,0x7e,0xff,0xff,0x7e,0x7e,0x3c,0x3c,0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_log_16[] = { 0x00,0x00,0x1c,0x00,0x30,0x00,0x60,0x00,0xff,0xff,0x60,0x00,0x30,0x00,0x1c,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_ble_16[] = { 0x80,0x01,0x84,0x21,0x88,0x11,0x90,0x09,0xa0,0x05,0xc0,0x03,0x80,0x01,0xc0,0x03,0xa0,0x05,0x90,0x09,0x88,0x11,0x84,0x21,0x80,0x01,0x00,0x00,0x00,0x00,0x00,0x00 };
-static const uint8_t icon_power_16[] = { 0x80,0x01,0x80,0x01,0x80,0x01,0x80,0x01,0x82,0x41,0x84,0x21,0x48,0x12,0x30,0x0c,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
+static const uint8_t icon_home_16[] = { 0x00, 0x00, 0x80, 0x01, 0xc0, 0x03, 0xe0, 0x07, 0x70, 0x0e, 0x38,
+                                        0x1c, 0xfc, 0x3f, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18,
+                                        0x18, 0x18, 0xf8, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_chat_16[] = { 0x00, 0x00, 0xfe, 0x7f, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01,
+                                        0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0xfe, 0x7f,
+                                        0x00, 0x0c, 0x00, 0x18, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_map_16[] = { 0x80, 0x01, 0xc0, 0x03, 0xe0, 0x07, 0x70, 0x0e, 0x38, 0x1c, 0x1c,
+                                       0x38, 0x0e, 0x70, 0x07, 0xe0, 0x0e, 0x70, 0x1c, 0x38, 0x38, 0x1c,
+                                       0x70, 0x0e, 0xe0, 0x07, 0xc0, 0x03, 0x80, 0x01, 0x00, 0x00 };
+static const uint8_t icon_nodes_16[] = { 0x00, 0x00, 0x0c, 0x30, 0x1e, 0x78, 0x1e, 0x78, 0x0c, 0x30, 0x00,
+                                         0x00, 0x0c, 0x30, 0x1e, 0x78, 0x1e, 0x78, 0x0c, 0x30, 0x00, 0x00,
+                                         0x0c, 0x30, 0x1e, 0x78, 0x1e, 0x78, 0x0c, 0x30, 0x00, 0x00 };
+static const uint8_t icon_radio_16[] = { 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0xff,
+                                         0xff, 0x80, 0x01, 0x80, 0x01, 0x3c, 0x3c, 0x42, 0x42, 0x81, 0x81,
+                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_settings_16[] = { 0x00, 0x30, 0x18, 0x18, 0x3c, 0x3c, 0x7e, 0x7e, 0xff, 0xff, 0x7e,
+                                            0x7e, 0x3c, 0x3c, 0x18, 0x18, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_log_16[] = { 0x00, 0x00, 0x1c, 0x00, 0x30, 0x00, 0x60, 0x00, 0xff, 0xff, 0x60,
+                                       0x00, 0x30, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_ble_16[] = { 0x80, 0x01, 0x84, 0x21, 0x88, 0x11, 0x90, 0x09, 0xa0, 0x05, 0xc0,
+                                       0x03, 0x80, 0x01, 0xc0, 0x03, 0xa0, 0x05, 0x90, 0x09, 0x88, 0x11,
+                                       0x84, 0x21, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t icon_power_16[] = { 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x80, 0x01, 0x82, 0x41, 0x84,
+                                         0x21, 0x48, 0x12, 0x30, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
 class SplashScreen : public UIScreen {
-  UITask* _task;
+  UITask *_task;
   unsigned long dismiss_after;
   char _version_info[12];
 
-  public:
-    SplashScreen(UITask* task) : _task(task) {
-      // strip off dash and commit hash by changing dash to null terminator
-      // e.g: v1.2.3-abcdef -> v1.2.3
-      const char *ver = FIRMWARE_VERSION;
-      const char *dash = strchr(ver, '-');
+public:
+  SplashScreen(UITask *task) : _task(task) {
+    // strip off dash and commit hash by changing dash to null terminator
+    // e.g: v1.2.3-abcdef -> v1.2.3
+    const char *ver = FIRMWARE_VERSION;
+    const char *dash = strchr(ver, '-');
 
-      int len = dash ? dash - ver : strlen(ver);
-      if (len >= sizeof(_version_info)) len = sizeof(_version_info) - 1;
-      memcpy(_version_info, ver, len);
-      _version_info[len] = 0;
+    int len = dash ? dash - ver : strlen(ver);
+    if (len >= sizeof(_version_info)) len = sizeof(_version_info) - 1;
+    memcpy(_version_info, ver, len);
+    _version_info[len] = 0;
 
-      // Extend to 5 seconds
-      dismiss_after = millis() + 5000;
+    // Extend to 5 seconds
+    dismiss_after = millis() + 5000;
+  }
+
+  int render(DisplayDriver &display) override {
+    int sw = display.width();
+    int sh = display.height();
+    int mid_x = sw / 2;
+
+    display.setColor(DisplayDriver::DARK);
+    display.fillRect(0, 0, sw, sh);
+
+    uint32_t now_ms = millis();
+    uint32_t elapsed = 5000 - (dismiss_after - now_ms);
+    float progress = (float)elapsed / 1000.0f;
+
+    DisplayDriver::Color textC = DisplayDriver::CHARCOAL;
+    if (progress >= 1.0f)
+      textC = DisplayDriver::LIGHT;
+    else if (progress > 0.8f)
+      textC = DisplayDriver::GREY;
+    else if (progress > 0.5f)
+      textC = DisplayDriver::SLATE_GREY;
+    else if (progress > 0.2f)
+      textC = DisplayDriver::DARK_GREY;
+
+    // Full-screen native 320x240 splash
+    if (progress > 0.1f) {
+      display.drawRGBBitmap(0, 0, touch_splash, touch_splash_width, touch_splash_height);
     }
 
-    int render(DisplayDriver& display) override {
-      int sw = display.width();
-      int sh = display.height();
-      int mid_x = sw / 2;
+    display.setColor(DisplayDriver::DARK);
+    display.fillRect(0, sh - 20, sw, 20);
+    display.setColor(textC);
+    display.setTextSize(1);
+    char base_info[64];
+    snprintf(base_info, sizeof(base_info), "MeshCore %s  |  Quark1980", _version_info);
+    display.drawTextCentered(mid_x, sh - 12, base_info);
 
-      display.setColor(DisplayDriver::DARK);
-      display.fillRect(0, 0, sw, sh);
-
-      uint32_t now_ms = millis();
-      uint32_t elapsed = 5000 - (dismiss_after - now_ms);
-      float progress = (float)elapsed / 1000.0f;
-
-      DisplayDriver::Color textC = DisplayDriver::CHARCOAL;
-      if (progress >= 1.0f) textC = DisplayDriver::LIGHT;
-      else if (progress > 0.8f) textC = DisplayDriver::GREY;
-      else if (progress > 0.5f) textC = DisplayDriver::SLATE_GREY;
-      else if (progress > 0.2f) textC = DisplayDriver::DARK_GREY;
-
-      // Full-screen native 320x240 splash
-      if (progress > 0.1f) {
-        display.drawRGBBitmap(0, 0, touch_splash, touch_splash_width, touch_splash_height);
-      }
-
-      display.setColor(DisplayDriver::DARK);
-      display.fillRect(0, sh - 20, sw, 20);
-      display.setColor(textC);
-      display.setTextSize(1);
-      char base_info[64];
-      snprintf(base_info, sizeof(base_info), "MeshCore %s  |  Quark1980", _version_info);
-      display.drawTextCentered(mid_x, sh - 12, base_info);
-
-      return 50;
+    if (now_ms >= dismiss_after) {
+      _task->gotoHomeScreen();
+      return 0;
     }
+
+    return 50;
+  }
 
   bool handleTouch(int x, int y) override {
     _task->gotoHomeScreen();
@@ -225,37 +263,41 @@ class SplashScreen : public UIScreen {
 class HomeScreen : public UIScreen {
 public:
   enum Tab { TAB_HOME, TAB_CHAT, TAB_NODES, TAB_GPS, TAB_CONFIG, TAB_LOG, TAB_BLE, TAB_POWER, TAB_COUNT };
+
 private:
   Tab _tab;
   bool _is_dashboard;
 
   // Layout Constants
-  const int _topbar_h = 25;   // Top navigation bar height
-  const int _num_tabs = 8;    // Number of tabs in the top bar (MAP removed)
-  const int _grid_cols = 4;
-  const int _grid_rows = 2;
+  const int _status_bar_h = 32; // Taller for counters
+  const int _num_tabs = 8;
+  const int _carousel_size = 3; // Show 3 icons at a time
+  int _carousel_scroll = 0;     // Horizontal offset
   int _active_tile = 0;
+
+  bool _msg_unread_count = 0;
+  int _node_count = 0;
 
   uint8_t _active_chat_idx;
   bool _active_chat_is_group;
   char _chat_draft[64];
   bool _keyboard_visible;
-  int _kb_shift; // 0=lower, 1=upper, 2=symbols/numbers
+  int _kb_shift;    // 0=lower, 1=upper, 2=symbols/numbers
   int _chat_scroll; // scroll offset for chat messages
   bool _chat_dropdown_open;
-  int _dropdown_scroll;  // scroll offset for channel dropdown
-  int _dropdown_drag_y;  // last touch y for drag-to-scroll
-  
+  int _dropdown_scroll; // scroll offset for channel dropdown
+  int _dropdown_drag_y; // last touch y for drag-to-scroll
+
   bool _show_msg_detail;
   int _msg_cursor;
   int _msg_scroll;
   int _nearby_scroll;
-  
+
   int _settings_cursor;
   int _settings_scroll;
   bool _num_input_visible;
   char _num_input_buf[16];
-  const char* _num_input_title;
+  const char *_num_input_title;
   bool _editing_node_name;
 
   bool _radio_raw_mode;
@@ -274,10 +316,10 @@ private:
   bool _msg_unread = false;
   bool _chat_unread = false;
 
-  UITask* _task;
-  mesh::RTCClock* _rtc;
-  SensorManager* _sensors;
-  NodePrefs* _node_prefs;
+  UITask *_task;
+  mesh::RTCClock *_rtc;
+  SensorManager *_sensors;
+  NodePrefs *_node_prefs;
 
   // Cached layout (updated every render).
   int _screen_w = 320;
@@ -308,19 +350,19 @@ private:
   int _radio_reset_y = 204;
   int _radio_reset_h = 24;
 
-  void updateLayout(DisplayDriver& display) {
+  void updateLayout(DisplayDriver &display) {
     _screen_w = display.width();
     _screen_h = display.height();
 
     _content_x = 0;
     _content_w = _screen_w;
 
-    _header_h = _topbar_h;  // header IS the top bar
+    _header_h = _status_bar_h;
     _row_h = 24;
-    _list_y = _topbar_h + 18;  // top bar + small sub-header
+    _list_y = _status_bar_h + 18;
     _list_rows = (_screen_h - _list_y - 8) / _row_h;
     if (_list_rows < 1) _list_rows = 1;
-    if (_list_rows > 8) _list_rows = 8;
+    if (_list_rows > 10) _list_rows = 10;
 
     _link_btn_h = (_screen_h >= 220) ? 34 : (_screen_h >= 180 ? 28 : 20);
     _link_ble_btn_y = _list_y + (_screen_h >= 220 ? 48 : 34);
@@ -338,56 +380,54 @@ private:
     _radio_reset_y = _screen_h - _radio_reset_h - 8;
     _radio_adv_btn_y = _radio_reset_y - _link_btn_h - 4;
 
-    _scroll_btn_w = (_screen_w >= 300) ? 28 : 22;
+    _scroll_btn_w = (_screen_w >= 300) ? 32 : 24; // Finger friendly
     _scroll_up_y = _list_y;
     _scroll_down_y = _screen_h - _row_h - 6;
   }
 
-  int tabY(int idx) const {
-    return _tab_top + idx * (_tab_h + _tab_gap);
-  }
+  int tabY(int idx) const { return _tab_top + idx * (_tab_h + _tab_gap); }
 
   bool isInRect(int x, int y, int rx, int ry, int rw, int rh) const {
     return (x >= rx) && (y >= ry) && (x < rx + rw) && (y < ry + rh);
   }
 
-  const  uint8_t* tabIcon(uint8_t i) {
+  const uint8_t *tabIcon(uint8_t i) {
     if (i == TAB_HOME) return icon_home_16;
-    if (i == TAB_CHAT)   return icon_chat_16;
-    if (i == TAB_NODES)  return icon_nodes_16;
-    if (i == TAB_GPS)    return icon_radio_16;
+    if (i == TAB_CHAT) return icon_chat_16;
+    if (i == TAB_NODES) return icon_nodes_16;
+    if (i == TAB_GPS) return icon_radio_16;
     if (i == TAB_CONFIG) return icon_settings_16;
-    if (i == TAB_LOG)    return icon_log_16;
-    if (i == TAB_BLE)    return icon_ble_16;
-    if (i == TAB_POWER)  return icon_power_16;
+    if (i == TAB_LOG) return icon_log_16;
+    if (i == TAB_BLE) return icon_ble_16;
+    if (i == TAB_POWER) return icon_power_16;
     return icon_settings_16;
   }
 
-  const char* tabShortLabel(uint8_t i) {
-    if (i == TAB_HOME)   return "HOME";
-    if (i == TAB_CHAT)   return "CHAT";
-    if (i == TAB_NODES)  return "NODE";
-    if (i == TAB_GPS)    return "RDIO";
+  const char *tabShortLabel(uint8_t i) {
+    if (i == TAB_HOME) return "TIME";
+    if (i == TAB_CHAT) return "CHAT";
+    if (i == TAB_NODES) return "NODE";
+    if (i == TAB_GPS) return "RDIO";
     if (i == TAB_CONFIG) return "CFG";
-    if (i == TAB_LOG)    return "LOG";
-    if (i == TAB_BLE)    return "BLE";
-    if (i == TAB_POWER)  return "PWR";
+    if (i == TAB_LOG) return "LOG";
+    if (i == TAB_BLE) return "BLE";
+    if (i == TAB_POWER) return "PWR";
     return "?";
   }
 
-  const char* tabLabel(uint8_t i) {
-    if (i == TAB_HOME)   return "HOME";
-    if (i == TAB_CHAT)   return "CHAT";
-    if (i == TAB_NODES)  return "NODES";
-    if (i == TAB_GPS)    return "RADIO";
+  const char *tabLabel(uint8_t i) {
+    if (i == TAB_HOME) return "CLOCK";
+    if (i == TAB_CHAT) return "CHAT";
+    if (i == TAB_NODES) return "NODES";
+    if (i == TAB_GPS) return "RADIO";
     if (i == TAB_CONFIG) return "SETTINGS";
-    if (i == TAB_LOG)    return "MSG LOG";
-    if (i == TAB_BLE)    return "BLE/LINK";
-    if (i == TAB_POWER)  return "POWER";
+    if (i == TAB_LOG) return "MSG LOG";
+    if (i == TAB_BLE) return "BLE/LINK";
+    if (i == TAB_POWER) return "POWER";
     return "???";
   }
 
-  void formatAge(uint32_t timestamp, char* out, size_t out_len) {
+  void formatAge(uint32_t timestamp, char *out, size_t out_len) {
     int secs = (int)(_rtc->getCurrentTime() - timestamp);
     if (secs < 0) secs = 0;
     if (secs < 60) {
@@ -399,60 +439,106 @@ private:
     }
   }
 
-  void drawChrome(DisplayDriver& display, const char* title) {
+  void drawChrome(DisplayDriver &display, const char *title) {
     display.setTextSize(1);
-    // Full width black background below top bar
+    // Dark background for context
     display.setColor(DisplayDriver::DARK);
-    display.fillRect(0, _topbar_h, _screen_w, _screen_h - _topbar_h);
+    display.fillRect(0, _status_bar_h, _screen_w, _screen_h - _status_bar_h);
 
-    // Sub-header: small title in the area between topbar and list
-    display.setColor(DisplayDriver::LIGHT);
-    display.drawTextLeftAlign(8, _topbar_h + 4, title);
+    if (!_is_dashboard) {
+      // Back Button moved to Status Bar area (top-left) in drawStatusBar
+      // just draw title here
+      display.setColor(DisplayDriver::NEON_CYAN);
+      display.drawTextLeftAlign(45, _status_bar_h + 8, title);
 
-    // Tiny separator line
-    display.setColor(DisplayDriver::SLATE_GREY);
-    display.fillRect(4, _topbar_h + 16, _screen_w - 8, 1);
-  }
-
-  void drawTopBar(DisplayDriver& display) {
-    // Background
-    display.setColor(DisplayDriver::CHARCOAL);
-    display.fillRect(0, 0, _screen_w, _topbar_h);
-
-    // Subtle bottom separator
-    display.setColor(DisplayDriver::DARK_GREY);
-    display.fillRect(0, _topbar_h - 1, _screen_w, 1);
-
-    // 9 tab buttons, Home is slightly wider
-    int extra_w = 14; 
-    int home_w = (_screen_w / _num_tabs) + extra_w;
-    int other_w = (_screen_w - home_w) / (_num_tabs - 1);
-
-    for (int i = 0; i < _num_tabs; i++) {
-        int tx = (i == 0) ? 0 : home_w + (i - 1) * other_w;
-        int tw = (i == 0) ? home_w : other_w;
-        int ty = 1;
-        int th = _topbar_h - 2;
-        bool active = !_is_dashboard && (_tab == (Tab)i);
-
-        // Active tab: neon cyan filled rounded rect
-        if (active) {
-            display.setColor(DisplayDriver::NEON_CYAN);
-            display.fillRoundRect(tx + 1, ty, tw - 2, th, 3);
-            display.setColor(DisplayDriver::DARK);
-        } else {
-            display.setColor(DisplayDriver::DARK_GREY);
-            display.drawRoundRect(tx + 1, ty, tw - 2, th, 3);
-            display.setColor(DisplayDriver::LIGHT);
-        }
-        
-        // For the home tab, use the icon if it fits better, or just text.
-        // The prompt asks for text "HOME".
-        display.drawTextCentered(tx + tw / 2, ty + (th / 2) - 4, tabShortLabel(i));
+      // Rugged Horizontal line
+      display.setColor(DisplayDriver::DARK_GREY);
+      display.fillRect(4, _status_bar_h + 30, _screen_w - 8, 1);
     }
   }
 
-  void renderHome(DisplayDriver& display) {
+  void drawStatusBar(DisplayDriver &display) {
+    // Deep Charcoal background
+    display.setColor(DisplayDriver::CHARCOAL);
+    display.fillRect(0, 0, _screen_w, _status_bar_h);
+
+    // High-visibility accent at very top
+    display.setColor(DisplayDriver::SLATE_GREY);
+    display.fillRect(0, 0, _screen_w, 1);
+
+    // Bottom separator for tactical depth
+    display.setColor(DisplayDriver::DARK_GREY);
+    display.fillRect(0, _status_bar_h - 1, _screen_w, 1);
+
+    // 1. Digital Clock (Centered)
+    uint32_t now = _rtc->getCurrentTime();
+    struct tm ti;
+    time_t t_now = now;
+    gmtime_r(&t_now, &ti);
+    char time_str[8];
+    snprintf(time_str, sizeof(time_str), "%02d:%02d", ti.tm_hour, ti.tm_min);
+    display.setColor(DisplayDriver::LIGHT);
+    display.drawTextCentered(_screen_w / 2, 8, time_str);
+
+    // 2. Unread Messages (✉) - Left of Clock
+    int unread = _task->getStoredMessageCount(); // Placeholder for actual unread
+    char m_str[8];
+    snprintf(m_str, sizeof(m_str), "M:%d", unread);
+    display.setColor(_chat_unread ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
+    display.drawTextLeftAlign(50, 8, m_str);
+
+    // 3. Discovered Nodes (⛫) - Right of Clock
+    the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
+    int nodes = 0;
+    for (int i = 0; i < UI_RECENT_LIST_SIZE; i++)
+      if (recent[i].name[0]) nodes++;
+    char n_str[8];
+    snprintf(n_str, sizeof(n_str), "N:%d", nodes);
+    display.setColor(DisplayDriver::NEON_CYAN);
+    display.drawTextRightAlign(_screen_w - 95, 8, n_str);
+
+    // 4. Signal Strength Bars (Rugged Blue/Cyan) - Further Left
+    // Overlaid by Back Button in sub-screens
+    if (_is_dashboard) {
+      float rssi = radio_driver.getLastRSSI();
+      int active_bars = 0;
+      if (rssi > -65)
+        active_bars = 4;
+      else if (rssi > -85)
+        active_bars = 3;
+      else if (rssi > -105)
+        active_bars = 2;
+      else if (rssi > -120)
+        active_bars = 1;
+
+      for (int i = 0; i < 4; i++) {
+        int bh = 4 + (i * 3);
+        int bx = 4 + (i * 6);
+        int by = _status_bar_h - bh - 6;
+        display.setColor(i < active_bars ? DisplayDriver::NEON_CYAN : DisplayDriver::DARK_GREY);
+        display.fillRect(bx, by, 4, bh);
+      }
+    } else {
+      // DRAW BACK BUTTON OVER SIGNAL AREA
+      display.setColor(DisplayDriver::DARK_GREY);
+      display.fillRoundRect(2, 2, 34, _status_bar_h - 4, 4);
+      display.setColor(DisplayDriver::NEON_CYAN);
+      display.drawRoundRect(2, 2, 34, _status_bar_h - 4, 4);
+      display.drawTextCentered(19, _status_bar_h / 2 - 4, "<");
+    }
+
+    // 5. Battery Data (Compact with Voltage)
+    uint16_t mv = _task->getBattMilliVolts();
+    int pct = (mv - 3300) * 100 / (4200 - 3300);
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    char batt_str[16];
+    snprintf(batt_str, sizeof(batt_str), "%d%% %.2fV", pct, (float)mv / 1000.0f);
+    display.setColor(DisplayDriver::LIGHT);
+    display.drawTextRightAlign(_screen_w - 4, 8, batt_str);
+  }
+
+  void renderHome(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -474,7 +560,7 @@ private:
 
     char time_str[8];
     snprintf(time_str, sizeof(time_str), "%02d:%02d", ti.tm_hour, ti.tm_min);
-    
+
     int clock_y = _list_y + 20;
     display.setColor(DisplayDriver::LIGHT);
     display.setTextSize(4);
@@ -490,7 +576,7 @@ private:
 
     // 2. Statistics Row
     int stat_y = clock_y + 50;
-    
+
     // Messages
     int total_msgs = _task->getStoredMessageCount();
     char msg_str[32];
@@ -502,7 +588,7 @@ private:
     the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
     int active_nodes = 0;
     for (int i = 0; i < UI_RECENT_LIST_SIZE; i++) {
-        if (recent[i].name[0] != 0) active_nodes++;
+      if (recent[i].name[0] != 0) active_nodes++;
     }
     char node_str[32];
     snprintf(node_str, sizeof(node_str), "Nodes: %d", active_nodes);
@@ -511,27 +597,32 @@ private:
     // 3. Signal Strength Indicator
     int sig_y = stat_y + 25;
     float rssi = radio_driver.getLastRSSI();
-    
+
     // Draw 5 bars
     int bar_w = 12;
     int bar_gap = 4;
     int total_bar_w = 5 * bar_w + 4 * bar_gap;
     int start_x = x + (w - total_bar_w) / 2;
-    
+
     int active_bars = 0;
-    if (rssi > -60) active_bars = 5;
-    else if (rssi > -80) active_bars = 4;
-    else if (rssi > -100) active_bars = 3;
-    else if (rssi > -115) active_bars = 2;
-    else if (rssi > -130) active_bars = 1;
+    if (rssi > -60)
+      active_bars = 5;
+    else if (rssi > -80)
+      active_bars = 4;
+    else if (rssi > -100)
+      active_bars = 3;
+    else if (rssi > -115)
+      active_bars = 2;
+    else if (rssi > -130)
+      active_bars = 1;
 
     for (int i = 0; i < 5; i++) {
-        int h = 10 + i * 5; // Bar height increases
-        int bx = start_x + i * (bar_w + bar_gap);
-        int by = sig_y + 30 - h; // Bottom aligned
-        
-        display.setColor(i < active_bars ? DisplayDriver::NEON_CYAN : DisplayDriver::DARK_GREY);
-        display.fillRect(bx, by, bar_w, h);
+      int h = 10 + i * 5; // Bar height increases
+      int bx = start_x + i * (bar_w + bar_gap);
+      int by = sig_y + 30 - h; // Bottom aligned
+
+      display.setColor(i < active_bars ? DisplayDriver::NEON_CYAN : DisplayDriver::DARK_GREY);
+      display.fillRect(bx, by, bar_w, h);
     }
 
     // Text below bars
@@ -541,60 +632,93 @@ private:
     display.drawTextCentered(x + w / 2, sig_y + 38, sig_str);
   }
 
-  void drawDashboard(DisplayDriver& display) {
+  void drawCarousel(DisplayDriver &display) {
     display.setTextSize(1);
-    int margin = 8;
-    int grid_w = _content_w - (margin * 2);
-    int tw = (grid_w - (margin * (_grid_cols - 1))) / _grid_cols;
-    int th = 75; // Even more compact for 4x2
-    
-    int total_h = (_grid_rows * th) + ((_grid_rows - 1) * margin);
-    int start_y = (_screen_h - total_h) / 2;
+    int start_y = _status_bar_h + 10;
+    int icon_th = 105; // More square icons (was 130)
+    int btn_h = 56;    // Bottom buttons
+    int btn_y = _screen_h - btn_h - 4;
+    int btn_w = (_screen_w / 2) - 8;
 
-    for (int i = 0; i < TAB_COUNT - 1; i++) { // Skip the COUNT enum
-        int col = i % _grid_cols;
-        int row = i / _grid_cols;
-        int tx = _content_x + margin + col * (tw + margin);
-        int ty = start_y + row * (th + margin);
-        drawTile(display, tx, ty, tw, th, tabLabel(i), tabIcon((Tab)i), (i == (_active_tile % (TAB_COUNT-1))));
+    // 3 Carousel Tiles in a row
+    int tw = _screen_w / 3;
+    for (int i = 0; i < 3; i++) {
+      int tab_idx = (_carousel_scroll + i) % (TAB_COUNT - 1);
+      int tx = i * tw;
+      // Highlight the middle one as "active" for fluent scroll feel
+      bool active = (i == 1);
+      drawTile(display, tx + 4, start_y, tw - 8, icon_th, tabLabel(tab_idx), tabIcon((Tab)tab_idx), active);
+    }
+
+    // Bottom Navigation Buttons (Wide Bars)
+    display.setColor(DisplayDriver::CHARCOAL);
+    display.fillRoundRect(4, btn_y, btn_w, btn_h, 10);
+    display.fillRoundRect(btn_w + 12, btn_y, btn_w, btn_h, 10);
+
+    display.setColor(DisplayDriver::DARK_GREY);
+    display.drawRoundRect(4, btn_y, btn_w, btn_h, 10);
+    display.drawRoundRect(btn_w + 12, btn_y, btn_w, btn_h, 10);
+
+    display.setColor(DisplayDriver::NEON_CYAN);
+    display.drawTextCentered(4 + btn_w / 2, btn_y + btn_h / 2 - 4, "PREV <<");
+    display.drawTextCentered(btn_w + 12 + btn_w / 2, btn_y + btn_h / 2 - 4, "NEXT >>");
+  }
+
+  // Simple pixel-doubling XBM scaler for 16x16 -> 32x32
+  void drawScaledXbm2x(DisplayDriver &display, int x, int y, const uint8_t *bitmap) {
+    for (int j = 0; j < 16; j++) {
+      for (int i = 0; i < 16; i++) {
+        int byteIdx = j * 2 + (i / 8);
+        int bitIdx = i % 8;
+        if (bitmap[byteIdx] & (1 << bitIdx)) {
+          display.fillRect(x + i * 2, y + j * 2, 2, 2);
+        }
+      }
     }
   }
 
-  void drawTile(DisplayDriver& display, int x, int y, int w, int h, const char* label, const uint8_t* icon, bool active) {
-    display.setColor(DisplayDriver::DARK_GREY); 
-    display.fillRoundRect(x, y, w, h, 8);
+  void drawTile(DisplayDriver &display, int x, int y, int w, int h, const char *label, const uint8_t *icon,
+                bool active) {
+    // Rugged Tile Design
+    display.setColor(DisplayDriver::CHARCOAL);
+    display.fillRoundRect(x, y, w, h, 10);
 
     if (active) {
-        display.setColor(DisplayDriver::NEON_CYAN);
-        display.drawRoundRect(x, y, w, h, 8);
+      display.setColor(DisplayDriver::NEON_CYAN);
+      display.drawRoundRect(x, y, w, h, 10);
+      display.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 10); // Double border for active
+    } else {
+      display.setColor(DisplayDriver::DARK_GREY);
+      display.drawRoundRect(x, y, w, h, 10);
     }
 
-    // Icon (16x16 Tactical)
-    int ix = x + (w - 16) / 2;
-    int iy = y + (h / 2) - 14;
-    display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
-    display.drawXbm(ix, iy, icon, 16, 16); 
-    
-    // Small native text
+    // Larger 32x32 Scaled Icon
+    int ix = x + (w / 2) - 16;
+    int iy = y + 15;
+    display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::GREY);
+    drawScaledXbm2x(display, ix, iy, icon);
+
+    // Label with small spacing
     display.setTextSize(1);
+    display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
     display.drawTextCentered(x + w / 2, y + h - 14, label);
   }
 
-  void drawButton(DisplayDriver& display, int x, int y, int w, int h, const char* label, bool active) {
+  void drawButton(DisplayDriver &display, int x, int y, int w, int h, const char *label, bool active) {
     if (w < 8 || h < 8) return;
 
-    int r = 4;
+    int r = 10;
     display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
     display.drawRoundRect(x, y, w, h, r);
     if (active) {
-        display.drawRoundRect(x + 1, y + 1, w - 2, h - 2, r);
+      display.drawRoundRect(x + 1, y + 1, w - 2, h - 2, r);
     }
 
     display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
     display.drawTextCentered(x + w / 2, y + (h / 2) - 3, label);
   }
 
-  void renderMessagesList(DisplayDriver& display) {
+  void renderMessagesList(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int total = _task->getStoredMessageCount();
@@ -630,11 +754,11 @@ private:
       bool selected = (idx == _msg_cursor);
       display.setColor(selected ? DisplayDriver::NEON_CYAN : DisplayDriver::DARK);
       if (selected) {
-          display.drawRect(x + 1, y, list_w - 2, _row_h - 1);
-          display.drawRect(x + 2, y + 1, list_w - 4, _row_h - 3);
+        display.drawRect(x + 1, y, list_w - 2, _row_h - 1);
+        display.drawRect(x + 2, y + 1, list_w - 4, _row_h - 3);
       } else {
-          display.setColor(DisplayDriver::SLATE_GREY);
-          display.fillRect(x + 1, y + _row_h - 1, list_w - 2, 1); // Thin separator line at bottom
+        display.setColor(DisplayDriver::SLATE_GREY);
+        display.fillRect(x + 1, y + _row_h - 1, list_w - 2, 1); // Thin separator line at bottom
       }
 
       char age[8];
@@ -663,7 +787,7 @@ private:
     drawButton(display, btn_x, _scroll_down_y, _scroll_btn_w, _row_h, "v", false);
   }
 
-  void renderMessageDetail(DisplayDriver& display) {
+  void renderMessageDetail(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -705,7 +829,7 @@ private:
     display.printWordWrap(filtered_msg, w - 10);
   }
 
-  void renderNearby(DisplayDriver& display) {
+  void renderNearby(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -732,9 +856,9 @@ private:
     int shown = 0;
     int skipped = 0;
     for (int i = 0; i < UI_RECENT_LIST_SIZE && shown < _list_rows; i++) {
-      AdvertPath* a = &recent[i];
+      AdvertPath *a = &recent[i];
       if (a->name[0] == 0) continue;
-      
+
       if (skipped < _nearby_scroll) {
         skipped++;
         continue;
@@ -772,11 +896,11 @@ private:
     drawButton(display, btn_x, _scroll_down_y, _scroll_btn_w, _row_h, "v", false);
   }
 
-  void renderMap(DisplayDriver& display) {
+  void renderMap(DisplayDriver &display) {
     // Empty - Map tab removed
   }
 
-  void renderChat(DisplayDriver& display) {
+  void renderChat(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y;
@@ -786,13 +910,13 @@ private:
     // Top: Channel Selector
     char ch_name[32] = "Select Channel / Contact";
     if (_active_chat_idx != 0xFF) {
-        if (_active_chat_is_group) {
-            ChannelDetails ch;
-            if (the_mesh.getChannel(_active_chat_idx, ch)) strcpy(ch_name, ch.name);
-        } else {
-            ContactInfo ci;
-            if (the_mesh.getContactByIdx(_active_chat_idx, ci)) strcpy(ch_name, ci.name);
-        }
+      if (_active_chat_is_group) {
+        ChannelDetails ch;
+        if (the_mesh.getChannel(_active_chat_idx, ch)) strcpy(ch_name, ch.name);
+      } else {
+        ContactInfo ci;
+        if (the_mesh.getContactByIdx(_active_chat_idx, ci)) strcpy(ch_name, ci.name);
+      }
     }
     drawButton(display, x + 4, _list_y + 4, w - 8, 22, ch_name, _chat_dropdown_open);
 
@@ -803,11 +927,11 @@ private:
     display.setColor(DisplayDriver::LIGHT);
     display.drawRect(x + 1, input_y - 1, w - 2, 26);
     if (_chat_draft[0] == 0) {
-        display.setColor(DisplayDriver::GREY);
-        display.drawTextLeftAlign(x + 6, input_y + 4, "Write message...");
+      display.setColor(DisplayDriver::GREY);
+      display.drawTextLeftAlign(x + 6, input_y + 4, "Write message...");
     } else {
-        display.setColor(DisplayDriver::LIGHT);
-        display.drawTextLeftAlign(x + 6, input_y + 4, _chat_draft);
+      display.setColor(DisplayDriver::LIGHT);
+      display.drawTextLeftAlign(x + 6, input_y + 4, _chat_draft);
     }
 
     // Middle: History (Filtered)
@@ -827,66 +951,66 @@ private:
 
     // Scan messages to find which ones fit and their exact heights
     for (int i = 0; i < _task->getStoredMessageCount(); i++) {
-        UITask::MessageEntry e;
-        // _chat_scroll indicates how many matching messages to skip from the newest
-        int actual_idx = i;
-        if (!_task->getStoredMessage(actual_idx, e)) break;
+      UITask::MessageEntry e;
+      // _chat_scroll indicates how many matching messages to skip from the newest
+      int actual_idx = i;
+      if (!_task->getStoredMessage(actual_idx, e)) break;
 
-        bool match = false;
-        if (_active_chat_idx != 0xFF) {
-            if (_active_chat_is_group) {
-                match = e.is_group && (e.channel_idx == _active_chat_idx);
-            } else {
-                match = !e.is_group && (e.channel_idx == 0xFF);
-            }
+      bool match = false;
+      if (_active_chat_idx != 0xFF) {
+        if (_active_chat_is_group) {
+          match = e.is_group && (e.channel_idx == _active_chat_idx);
+        } else {
+          match = !e.is_group && (e.channel_idx == 0xFF);
+        }
+      }
+
+      if (match) {
+        if (_chat_scroll > 0) {
+          _chat_scroll--; // skip this message
+          continue;
         }
 
-        if (match) {
-            if (_chat_scroll > 0) {
-               _chat_scroll--; // skip this message
-               continue;
-            }
+        int h = measureTextWrapped(display, text_w, e.text);
+        int block_h = h > 14 ? h : 14;
 
-            int h = measureTextWrapped(display, text_w, e.text);
-            int block_h = h > 14 ? h : 14; 
-            
-            msg_indices[num_matching] = actual_idx;
-            msg_heights[num_matching] = block_h;
-            num_matching++;
-            total_height += (block_h + 4); 
+        msg_indices[num_matching] = actual_idx;
+        msg_heights[num_matching] = block_h;
+        num_matching++;
+        total_height += (block_h + 4);
 
-            if (total_height > hist_h || num_matching >= MAX_VISIBLE_MSGS) {
-                break;
-            }
+        if (total_height > hist_h || num_matching >= MAX_VISIBLE_MSGS) {
+          break;
         }
+      }
     }
 
     // Step 2: Draw the collected messages from bottom to top
     int current_y = message_bottom_y;
     for (int i = 0; i < num_matching; i++) {
-        UITask::MessageEntry e;
-        _task->getStoredMessage(msg_indices[i], e);
-        int block_h = msg_heights[i];
-        
-        current_y -= (block_h + 4); // moving cursor UP
-        if (current_y < hist_y - 12) break; // sanity check against drawing over header
+      UITask::MessageEntry e;
+      _task->getStoredMessage(msg_indices[i], e);
+      int block_h = msg_heights[i];
 
-        int ry = current_y;
+      current_y -= (block_h + 4);         // moving cursor UP
+      if (current_y < hist_y - 12) break; // sanity check against drawing over header
 
-        // Draw sender info
-        if (e.is_sent) {
-            display.setColor(e.status == 1 ? DisplayDriver::GREEN : DisplayDriver::RED);
-            char tag[16];
-            snprintf(tag, sizeof(tag), " Me:%d", e.repeat_count);
-            display.drawTextEllipsized(x + 4, ry, 60, tag);
-        } else {
-            display.setColor(DisplayDriver::BLUE);
-            display.drawTextEllipsized(x + 4, ry, 60, e.origin);
-        }
+      int ry = current_y;
 
-        // Draw message body wrapped
-        display.setColor(DisplayDriver::LIGHT);
-        drawTextWrapped(display, text_x, ry, text_w, e.text);
+      // Draw sender info
+      if (e.is_sent) {
+        display.setColor(e.status == 1 ? DisplayDriver::GREEN : DisplayDriver::RED);
+        char tag[16];
+        snprintf(tag, sizeof(tag), " Me:%d", e.repeat_count);
+        display.drawTextEllipsized(x + 4, ry, 60, tag);
+      } else {
+        display.setColor(DisplayDriver::BLUE);
+        display.drawTextEllipsized(x + 4, ry, 60, e.origin);
+      }
+
+      // Draw message body wrapped
+      display.setColor(DisplayDriver::LIGHT);
+      drawTextWrapped(display, text_x, ry, text_w, e.text);
     }
 
     if (_keyboard_visible) renderKeyboard(display);
@@ -895,80 +1019,80 @@ private:
 
   // --- Word-wrapping helpers ---
   // Returns the height (in pixels) required to render the string
-  int measureTextWrapped(DisplayDriver& display, int max_w, const char* str) {
-      if (!str || str[0] == '\0') return 12;
-      
-      int lines = 1;
-      char word[64];
-      int word_len = 0;
-      int current_w = 0;
-      int space_w = display.getTextWidth(" ");
+  int measureTextWrapped(DisplayDriver &display, int max_w, const char *str) {
+    if (!str || str[0] == '\0') return 12;
 
-      for (int i = 0; ; i++) {
-          char c = str[i];
-          if (c == ' ' || c == '\n' || c == '\0' || word_len >= 63) {
-              word[word_len] = '\0';
-              if (word_len > 0) {
-                  int w = display.getTextWidth(word);
-                  if (current_w + w > max_w && current_w > 0) {
-                      lines++;
-                      current_w = w + space_w;
-                  } else {
-                      current_w += w + space_w;
-                  }
-                  word_len = 0;
-              }
-              if (c == '\n') {
-                  lines++;
-                  current_w = 0;
-              }
-              if (c == '\0') break;
+    int lines = 1;
+    char word[64];
+    int word_len = 0;
+    int current_w = 0;
+    int space_w = display.getTextWidth(" ");
+
+    for (int i = 0;; i++) {
+      char c = str[i];
+      if (c == ' ' || c == '\n' || c == '\0' || word_len >= 63) {
+        word[word_len] = '\0';
+        if (word_len > 0) {
+          int w = display.getTextWidth(word);
+          if (current_w + w > max_w && current_w > 0) {
+            lines++;
+            current_w = w + space_w;
           } else {
-              word[word_len++] = c;
+            current_w += w + space_w;
           }
+          word_len = 0;
+        }
+        if (c == '\n') {
+          lines++;
+          current_w = 0;
+        }
+        if (c == '\0') break;
+      } else {
+        word[word_len++] = c;
       }
-      return lines * 13; // 13px line height
+    }
+    return lines * 13; // 13px line height
   }
 
   // Draws the string wrapped at max_w and returns the height consumed
-  int drawTextWrapped(DisplayDriver& display, int x, int y, int max_w, const char* str) {
-      if (!str || str[0] == '\0') return 12;
+  int drawTextWrapped(DisplayDriver &display, int x, int y, int max_w, const char *str) {
+    if (!str || str[0] == '\0') return 12;
 
-      int start_y = y;
-      char word[64];
-      int word_len = 0;
-      int current_w = 0;
-      int space_w = display.getTextWidth(" ");
+    int start_y = y;
+    char word[64];
+    int word_len = 0;
+    int current_w = 0;
+    int space_w = display.getTextWidth(" ");
 
-      for (int i = 0; ; i++) {
-          char c = str[i];
-          // break on space, newline, null terminator, or if word is too long
-          if (c == ' ' || c == '\n' || c == '\0' || word_len >= 63) {
-              word[word_len] = '\0';
-              if (word_len > 0) {
-                  int w = display.getTextWidth(word);
-                  if (current_w + w > max_w && current_w > 0) {
-                      // New line
-                      y += 13;
-                      current_w = 0;
-                  }
-                  display.drawTextLeftAlign(x + current_w, y, word);
-                  current_w += w + space_w;
-                  word_len = 0;
-              }
-              if (c == '\n') {
-                  y += 13;
-                  current_w = 0;
-              }
-              if (c == '\0') break;
-          } else {
-              word[word_len++] = c;
+    for (int i = 0;; i++) {
+      char c = str[i];
+      // break on space, newline, null terminator, or if word is too long
+      if (c == ' ' || c == '\n' || c == '\0' || word_len >= 63) {
+        word[word_len] = '\0';
+        if (word_len > 0) {
+          int w = display.getTextWidth(word);
+          if (current_w + w > max_w && current_w > 0) {
+            // New line
+            y += 13;
+            current_w = 0;
           }
+          display.drawTextLeftAlign(x + current_w, y, word);
+          current_w += w + space_w;
+          word_len = 0;
+        }
+        if (c == '\n') {
+          y += 13;
+          current_w = 0;
+        }
+        if (c == '\0') break;
+      } else {
+        word[word_len++] = c;
       }
-      return (y - start_y) + 13;
+    }
+    return (y - start_y) + 13;
   }
 
-  void renderKeyboard(DisplayDriver& display) {
+  void renderKeyboard(DisplayDriver &display) {
     int kb_h = 160;
     int kb_y = _screen_h - kb_h;
     display.setColor(DisplayDriver::DARK);
@@ -982,26 +1106,26 @@ private:
     display.setColor(DisplayDriver::SLATE_GREY);
     display.drawRect(1, kb_y + 1, _screen_w - 2, 32);
     if (_chat_draft[0] == 0) {
-        display.setColor(DisplayDriver::GREY);
-        display.drawTextLeftAlign(6, kb_y + 8, "Type message...");
+      display.setColor(DisplayDriver::GREY);
+      display.drawTextLeftAlign(6, kb_y + 8, "Type message...");
     } else {
-        display.setColor(DisplayDriver::LIGHT);
-        display.drawTextLeftAlign(6, kb_y + 8, _chat_draft);
+      display.setColor(DisplayDriver::LIGHT);
+      display.drawTextLeftAlign(6, kb_y + 8, _chat_draft);
     }
 
-    const char* rows[3];
+    const char *rows[3];
     if (_kb_shift == 0) {
-        rows[0] = "qwertyuiop";
-        rows[1] = "asdfghjkl";
-        rows[2] = "zxcvbnm";
+      rows[0] = "qwertyuiop";
+      rows[1] = "asdfghjkl";
+      rows[2] = "zxcvbnm";
     } else if (_kb_shift == 1) {
-        rows[0] = "QWERTYUIOP";
-        rows[1] = "ASDFGHJKL";
-        rows[2] = "ZXCVBNM";
+      rows[0] = "QWERTYUIOP";
+      rows[1] = "ASDFGHJKL";
+      rows[2] = "ZXCVBNM";
     } else {
-        rows[0] = "1234567890";
-        rows[1] = "-/()$&@\"";
-        rows[2] = ".,?!'#";
+      rows[0] = "1234567890";
+      rows[1] = "-/()$&@\"";
+      rows[2] = ".,?!'#";
     }
 
     int ky = kb_y + 36;
@@ -1009,30 +1133,30 @@ private:
     int kh = 26;
 
     for (int r = 0; r < 3; r++) {
-        int len = strlen(rows[r]);
-        int ox = (_screen_w - (len * kw)) / 2;
-        for (int c = 0; c < len; c++) {
-            char key[2] = { rows[r][c], 0 };
-            drawKey(display, ox + c * kw, ky + r * (kh + 4), kw - 2, kh, key);
-        }
+      int len = strlen(rows[r]);
+      int ox = (_screen_w - (len * kw)) / 2;
+      for (int c = 0; c < len; c++) {
+        char key[2] = { rows[r][c], 0 };
+        drawKey(display, ox + c * kw, ky + r * (kh + 4), kw - 2, kh, key);
+      }
     }
 
     // Special keys
     int bottom_y = ky + 3 * (kh + 4);
     // Case toggle (ABC/abc) - Only relevant if not in symbols mode
-    const char* case_label = (_kb_shift == 1) ? "abc" : "ABC";
+    const char *case_label = (_kb_shift == 1) ? "abc" : "ABC";
     drawKey(display, 4, bottom_y, 36, kh, case_label);
-    
+
     // Mode toggle (123 / ABC)
-    const char* mode_label = (_kb_shift == 2) ? "ABC" : "123";
+    const char *mode_label = (_kb_shift == 2) ? "ABC" : "123";
     drawKey(display, 45, bottom_y, 36, kh, mode_label);
-    
+
     drawKey(display, 86, bottom_y, 98, kh, "SPACE");
     drawKey(display, 190, bottom_y, 55, kh, "BKSP");
     drawKey(display, 250, bottom_y, 65, kh, "SEND");
   }
 
-  void drawKey(DisplayDriver& display, int x, int y, int w, int h, const char* label) {
+  void drawKey(DisplayDriver &display, int x, int y, int w, int h, const char *label) {
     display.setColor(DisplayDriver::DARK);
     display.fillRoundRect(x, y, w, h, 2);
     display.setColor(DisplayDriver::SLATE_GREY);
@@ -1041,7 +1165,7 @@ private:
     display.drawTextCentered(x + w / 2, y + (h - 12) / 2, label);
   }
 
-  void renderChatDropdown(DisplayDriver& display) {
+  void renderChatDropdown(DisplayDriver &display) {
     int dx = _content_x + 10;
     int dy = _list_y + 26;
     int dw = _content_w - 20;
@@ -1054,8 +1178,10 @@ private:
     int total_channels = 0;
     ChannelDetails temp_ch;
     for (int i = 0; i < MAX_GROUP_CHANNELS; i++) {
-        if (the_mesh.getChannel(i, temp_ch)) total_channels++;
-        else break;
+      if (the_mesh.getChannel(i, temp_ch))
+        total_channels++;
+      else
+        break;
     }
 
     int max_visible = 5;
@@ -1073,19 +1199,19 @@ private:
 
     // Channel entries
     for (int i = 0; i < max_visible; i++) {
-        int ch_idx = _dropdown_scroll + i;
-        ChannelDetails ch;
-        if (!the_mesh.getChannel(ch_idx, ch)) break;
-        int iy = dy + 6 + i * ch_h;
-        bool active = (ch_idx == _active_chat_idx && _active_chat_is_group);
-        display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
-        display.drawRoundRect(dx + 4, iy, list_w, ch_h - 2, 2);
-        display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
-        display.drawTextLeftAlign(dx + 10, iy + 4, ch.name);
+      int ch_idx = _dropdown_scroll + i;
+      ChannelDetails ch;
+      if (!the_mesh.getChannel(ch_idx, ch)) break;
+      int iy = dy + 6 + i * ch_h;
+      bool active = (ch_idx == _active_chat_idx && _active_chat_is_group);
+      display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
+      display.drawRoundRect(dx + 4, iy, list_w, ch_h - 2, 2);
+      display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
+      display.drawTextLeftAlign(dx + 10, iy + 4, ch.name);
     }
   }
 
-  void renderRadio(DisplayDriver& display) {
+  void renderRadio(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -1095,8 +1221,10 @@ private:
 
     int left_btn_x = x + 6;
     int right_btn_x = left_btn_x + _radio_toggle_w + 8;
-    drawButton(display, left_btn_x, _radio_toggle_y, _radio_toggle_w, _radio_toggle_h, "Config", !_radio_raw_mode);
-    drawButton(display, right_btn_x, _radio_toggle_y, _radio_toggle_w, _radio_toggle_h, "Raw", _radio_raw_mode);
+    drawButton(display, left_btn_x, _radio_toggle_y, _radio_toggle_w, _radio_toggle_h, "Config",
+               !_radio_raw_mode);
+    drawButton(display, right_btn_x, _radio_toggle_y, _radio_toggle_w, _radio_toggle_h, "Raw",
+               _radio_raw_mode);
 
     int y = _radio_toggle_y + _radio_toggle_h + 8;
     char tmp[64];
@@ -1131,18 +1259,15 @@ private:
       snprintf(tmp, sizeof(tmp), "Noise Floor: %d", radio_driver.getNoiseFloor());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Pkts RX/TX: %lu / %lu",
-               (unsigned long)radio_driver.getPacketsRecv(),
+      snprintf(tmp, sizeof(tmp), "Pkts RX/TX: %lu / %lu", (unsigned long)radio_driver.getPacketsRecv(),
                (unsigned long)radio_driver.getPacketsSent());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Flood TX/RX: %lu / %lu",
-               (unsigned long)the_mesh.getNumSentFlood(),
+      snprintf(tmp, sizeof(tmp), "Flood TX/RX: %lu / %lu", (unsigned long)the_mesh.getNumSentFlood(),
                (unsigned long)the_mesh.getNumRecvFlood());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Direct TX/RX: %lu / %lu",
-               (unsigned long)the_mesh.getNumSentDirect(),
+      snprintf(tmp, sizeof(tmp), "Direct TX/RX: %lu / %lu", (unsigned long)the_mesh.getNumSentDirect(),
                (unsigned long)the_mesh.getNumRecvDirect());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
@@ -1156,7 +1281,7 @@ private:
     drawButton(display, x + 8, _radio_reset_y, w - 16, _radio_reset_h, "Reset Radio Stats", false);
   }
 
-  void renderLink(DisplayDriver& display) {
+  void renderLink(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -1169,7 +1294,7 @@ private:
 
     display.setColor(DisplayDriver::NEON_CYAN);
     display.drawTextCentered(x + w / 2, _list_y + 10, "CONNECTION STATUS");
-    
+
     display.setColor(DisplayDriver::SLATE_GREY);
     display.fillRect(x + 10, _list_y + 20, w - 20, 1);
 
@@ -1183,19 +1308,24 @@ private:
     }
     display.drawTextCentered(x + w / 2, _list_y + 29, _task->hasConnection() ? "Connected" : "Disconnected");
 
-    char tmp[32];
     if (the_mesh.getBLEPin() != 0) {
-      snprintf(tmp, sizeof(tmp), "PIN %d", the_mesh.getBLEPin());
-      display.setColor(DisplayDriver::LIGHT);
-      display.drawTextRightAlign(x + w - 8, _list_y + 45, tmp);
+      char tmp[32];
+      snprintf(tmp, sizeof(tmp), "PAIR PIN: %06lu", (unsigned long)the_mesh.getBLEPin());
+      int py = _screen_h - 40;
+      display.setColor(DisplayDriver::CHARCOAL);
+      display.fillRoundRect(x + 40, py - 15, w - 80, 31, 8);
+      display.setColor(DisplayDriver::NEON_CYAN);
+      display.drawRoundRect(x + 40, py - 15, w - 80, 31, 8);
+      display.setTextSize(2);
+      display.drawTextCentered(x + w / 2, py - 7, tmp);
+      display.setTextSize(1);
     }
 
     drawButton(display, x + 8, _link_ble_btn_y, w - 16, _link_btn_h,
-               _task->isSerialEnabled() ? "Disable BLE" : "Enable BLE",
-               _task->isSerialEnabled());
+               _task->isSerialEnabled() ? "Disable BLE" : "Enable BLE", _task->isSerialEnabled());
   }
 
-  void renderPower(DisplayDriver& display) {
+  void renderPower(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -1230,75 +1360,87 @@ private:
     _task->showAlert("EU/UK Narrow Applied", 2000);
   }
 
-  void renderSettings(DisplayDriver& display) {
+  void renderSettings(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
 
     if (_num_input_visible) {
-        renderNumKeypad(display);
-        return;
+      renderNumKeypad(display);
+      return;
     }
 
     display.setColor(DisplayDriver::DARK);
     display.fillRect(x, _list_y, w, panel_h);
 
     const int SETTINGS_COUNT = 13;
-    const char* labels[SETTINGS_COUNT] = {
-        "UK Narrow Preset",
-        "Node Name",
-        "Frequency",
-        "Spreading Factor",
-        "Bandwidth",
-        "Coding Rate",
-        "TX Power",
-        "BLE PIN",
-        "GPS Mode",
-        "Buzzer",
-        "Set Time (HH:MM)",
-        "Set Latitude",
-        "Set Longitude"
-    };
+    const char *labels[SETTINGS_COUNT] = { "UK Narrow Preset", "Node Name",        "Frequency",
+                                           "Spreading Factor", "Bandwidth",        "Coding Rate",
+                                           "TX Power",         "BLE PIN",          "GPS Mode",
+                                           "Buzzer",           "Set Time (HH:MM)", "Set Latitude",
+                                           "Set Longitude" };
 
     int list_w = w - _scroll_btn_w - 4;
     for (int i = 0; i < _list_rows; i++) {
-        int idx = _settings_scroll + i;
-        if (idx >= SETTINGS_COUNT) break;
+      int idx = _settings_scroll + i;
+      if (idx >= SETTINGS_COUNT) break;
 
-        int y = _list_y + i * _row_h;
-        bool selected = (idx == _settings_cursor);
+      int y = _list_y + i * _row_h;
+      bool selected = (idx == _settings_cursor);
 
-        display.setColor(selected ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
-        display.drawRoundRect(x + 1, y, list_w - 2, _row_h - 1, 4);
+      display.setColor(selected ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
+      display.drawRoundRect(x + 1, y, list_w - 2, _row_h - 1, 4);
 
-        display.setColor(DisplayDriver::LIGHT);
-        display.drawTextLeftAlign(x + 6, y + 4, labels[idx]);
+      display.setColor(DisplayDriver::LIGHT);
+      display.drawTextLeftAlign(x + 6, y + 4, labels[idx]);
 
-        char val[32] = "";
-        display.setColor(DisplayDriver::NEON_CYAN);
-        switch(idx) {
-            case 1: snprintf(val, sizeof(val), "%s", _node_prefs->node_name); break;
-            case 2: snprintf(val, sizeof(val), "%.3f", _node_prefs->freq); break;
-            case 3: snprintf(val, sizeof(val), "SF%d", _node_prefs->sf); break;
-            case 4: snprintf(val, sizeof(val), "%.1f", _node_prefs->bw); break;
-            case 5: snprintf(val, sizeof(val), "4/%d", _node_prefs->cr); break;
-            case 6: snprintf(val, sizeof(val), "%ddBm", _node_prefs->tx_power_dbm); break;
-            case 7: snprintf(val, sizeof(val), "%06lu", _node_prefs->ble_pin); break;
-            case 8: snprintf(val, sizeof(val), "%s", _node_prefs->gps_enabled ? "ON" : "OFF"); break;
-            case 9: snprintf(val, sizeof(val), "%s", _node_prefs->buzzer_quiet ? "QUIET" : "BEEP"); break;
-            case 10: {
-                struct timeval tv;
-                gettimeofday(&tv, NULL);
-                time_t now = tv.tv_sec;
-                struct tm ti;
-                gmtime_r(&now, &ti);
-                snprintf(val, sizeof(val), "%02d:%02d", ti.tm_hour, ti.tm_min);
-                break;
-            }
-            case 11: snprintf(val, sizeof(val), "%.5f", _sensors->node_lat); break;
-            case 12: snprintf(val, sizeof(val), "%.5f", _sensors->node_lon); break;
-        }
-        display.drawTextRightAlign(x + list_w - 6, y + 4, val);
+      char val[32] = "";
+      display.setColor(DisplayDriver::NEON_CYAN);
+      switch (idx) {
+      case 1:
+        snprintf(val, sizeof(val), "%s", _node_prefs->node_name);
+        break;
+      case 2:
+        snprintf(val, sizeof(val), "%.3f", _node_prefs->freq);
+        break;
+      case 3:
+        snprintf(val, sizeof(val), "SF%d", _node_prefs->sf);
+        break;
+      case 4:
+        snprintf(val, sizeof(val), "%.1f", _node_prefs->bw);
+        break;
+      case 5:
+        snprintf(val, sizeof(val), "4/%d", _node_prefs->cr);
+        break;
+      case 6:
+        snprintf(val, sizeof(val), "%ddBm", _node_prefs->tx_power_dbm);
+        break;
+      case 7:
+        snprintf(val, sizeof(val), "%06lu", _node_prefs->ble_pin);
+        break;
+      case 8:
+        snprintf(val, sizeof(val), "%s", _node_prefs->gps_enabled ? "ON" : "OFF");
+        break;
+      case 9:
+        snprintf(val, sizeof(val), "%s", _node_prefs->buzzer_quiet ? "QUIET" : "BEEP");
+        break;
+      case 10: {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        time_t now = tv.tv_sec;
+        struct tm ti;
+        gmtime_r(&now, &ti);
+        snprintf(val, sizeof(val), "%02d:%02d", ti.tm_hour, ti.tm_min);
+        break;
+      }
+      case 11:
+        snprintf(val, sizeof(val), "%.5f", _sensors->node_lat);
+        break;
+      case 12:
+        snprintf(val, sizeof(val), "%.5f", _sensors->node_lon);
+        break;
+      }
+      display.drawTextRightAlign(x + list_w - 6, y + 4, val);
     }
 
     // Scroll buttons
@@ -1307,7 +1449,7 @@ private:
     drawButton(display, btn_x, _scroll_down_y, _scroll_btn_w, _row_h, "v", false);
   }
 
-  void renderNumKeypad(DisplayDriver& display) {
+  void renderNumKeypad(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
     int panel_h = _screen_h - _list_y - 6;
@@ -1320,15 +1462,15 @@ private:
     display.setColor(DisplayDriver::LIGHT);
     display.drawTextLeftAlign(x + 10, _list_y + 22, _num_input_buf);
 
-    const char* nkeys[12] = {"1","2","3","4","5","6","7","8","9",".","0","X"};
+    const char *nkeys[12] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "X" };
     if (strcmp(_num_input_title, "Set Time (HH:MM)") == 0) nkeys[9] = ":";
-    
+
     int kw = (w - 20) / 3;
     int kh = (panel_h - 60) / 4;
     for (int i = 0; i < 12; i++) {
-        int kx = x + 10 + (i % 3) * kw;
-        int ky = _list_y + 48 + (i / 3) * kh;
-        drawButton(display, kx + 2, ky + 2, kw - 4, kh - 4, nkeys[i], false);
+      int kx = x + 10 + (i % 3) * kw;
+      int ky = _list_y + 48 + (i / 3) * kh;
+      drawButton(display, kx + 2, ky + 2, kw - 4, kh - 4, nkeys[i], false);
     }
     // Move OK button to top-right to avoid overlap
     drawButton(display, x + w - 45, _list_y + 8, 40, 24, "OK", true);
@@ -1336,8 +1478,10 @@ private:
 
   void activateCurrentTab() {
     if (_tab == TAB_LOG) {
-      if (_task->isSerialEnabled()) _task->disableSerial();
-      else _task->enableSerial();
+      if (_task->isSerialEnabled())
+        _task->disableSerial();
+      else
+        _task->enableSerial();
       return;
     }
     if (_tab == TAB_POWER) {
@@ -1359,26 +1503,24 @@ private:
   }
 
 public:
-  HomeScreen(UITask* task, mesh::RTCClock* rtc, SensorManager* sensors, NodePrefs* node_prefs)
-     : _task(task), _rtc(rtc), _sensors(sensors), _node_prefs(node_prefs),
-       _tab(TAB_HOME), _is_dashboard(false), _show_msg_detail(false), _msg_cursor(0), _msg_scroll(0), _nearby_scroll(0),
-       _settings_cursor(0), _settings_scroll(0),
-       _active_chat_idx(0), _active_chat_is_group(true), _keyboard_visible(false), _kb_shift(0), _chat_scroll(0), _chat_dropdown_open(false),
-       _dropdown_scroll(0), _dropdown_drag_y(-1),
-       _radio_raw_mode(false),
-       _editing_node_name(false),
-       _power_armed(false), _power_armed_until(0),
-       _msg_unread(false), _chat_unread(false) {
-     _chat_draft[0] = 0;
-     _num_input_buf[0] = 0;
-     _num_input_title = "";
-   }
-
-  void setUnread(Tab tab) {
-      if (tab == TAB_CHAT) _chat_unread = true;
+  HomeScreen(UITask *task, mesh::RTCClock *rtc, SensorManager *sensors, NodePrefs *node_prefs)
+      : _task(task), _rtc(rtc), _sensors(sensors), _node_prefs(node_prefs), _tab(TAB_HOME),
+        _is_dashboard(true), _show_msg_detail(false), _msg_cursor(0), _msg_scroll(0), _nearby_scroll(0),
+        _settings_cursor(0), _settings_scroll(0), _active_chat_idx(0), _active_chat_is_group(true),
+        _keyboard_visible(false), _kb_shift(0), _chat_scroll(0), _chat_dropdown_open(false),
+        _dropdown_scroll(0), _dropdown_drag_y(-1), _radio_raw_mode(false), _editing_node_name(false),
+        _power_armed(false), _power_armed_until(0), _msg_unread(false), _chat_unread(false),
+        _num_input_visible(false) {
+    _chat_draft[0] = 0;
+    _num_input_buf[0] = 0;
+    _num_input_title = "";
   }
 
-  int render(DisplayDriver& display) override {
+  void setUnread(Tab tab) {
+    if (tab == TAB_CHAT) _chat_unread = true;
+  }
+
+  int render(DisplayDriver &display) override {
     updateLayout(display);
     display.setTextSize(1);
 
@@ -1389,14 +1531,14 @@ public:
       _power_armed = false;
     }
 
-    const char* title = tabLabel(_tab);
+    const char *title = tabLabel(_tab);
     if (_is_dashboard) title = "Launcher";
 
-    drawTopBar(display);
+    drawStatusBar(display);
     drawChrome(display, title);
 
     if (_is_dashboard) {
-      drawDashboard(display);
+      drawCarousel(display);
     } else {
       display.setTextSize(1);
       if (_tab == TAB_HOME) {
@@ -1419,21 +1561,23 @@ public:
       }
     }
 
+    drawTouchDebugDot(display);
+
     return 250;
   }
 
   bool handleInput(char c) override {
     if (_is_dashboard) {
       if (c == KEY_LEFT || c == KEY_PREV) {
-        _active_tile = (_active_tile + 8) % 9;
+        _active_tile = (_active_tile + 7) % 8;
         return true;
       }
       if (c == KEY_RIGHT || c == KEY_NEXT) {
-        _active_tile = (_active_tile + 1) % 9;
+        _active_tile = (_active_tile + 1) % 8;
         return true;
       }
       if (c == KEY_ENTER) {
-        if (_active_tile >= 0 && _active_tile < 9) {
+        if (_active_tile >= 0 && _active_tile < 8) {
           _tab = (Tab)_active_tile;
           _is_dashboard = false;
         }
@@ -1481,378 +1625,416 @@ public:
     }
 
     if (_tab == TAB_CONFIG) {
-        if (_num_input_visible) {
-            if (c == KEY_ENTER) {
-                // OK (simplified keyboard mapping)
-                float fval = atof(_num_input_buf);
-                int ival = atoi(_num_input_buf);
-                switch(_settings_cursor) {
-                    case 2: _node_prefs->freq = fval; break;
-                    case 3: _node_prefs->sf = (uint8_t)ival; break;
-                    case 4: _node_prefs->bw = fval; break;
-                    case 5: _node_prefs->cr = (uint8_t)ival; break;
-                    case 6: _node_prefs->tx_power_dbm = (int8_t)ival; break;
-                    case 7: _node_prefs->ble_pin = (uint32_t)atoll(_num_input_buf); break;
-                    case 10: {
-                        int hh = 0, mm = 0;
-                        if (sscanf(_num_input_buf, "%d:%d", &hh, &mm) == 2) {
-                            struct timeval tv_now;
-                            gettimeofday(&tv_now, NULL);
-                            time_t t = tv_now.tv_sec;
-                            struct tm ti;
-                            gmtime_r(&t, &ti);
-                            ti.tm_hour = hh;
-                            ti.tm_min = mm;
-                            ti.tm_sec = 0;
-                            struct timeval tv;
-                            tv.tv_sec = mktime(&ti);
-                            tv.tv_usec = 0;
-                            settimeofday(&tv, NULL);
-                        }
-                        break;
-                    }
-                    case 11: {
-                        _sensors->node_lat = atof(_num_input_buf);
-                        the_mesh.savePrefs();
-                        break;
-                    }
-                    case 12: {
-                        _sensors->node_lon = atof(_num_input_buf);
-                        the_mesh.savePrefs();
-                        break;
-                    }
-                }
-                the_mesh.savePrefs();
-                _num_input_visible = false;
-                return true;
+      if (_num_input_visible) {
+        if (c == KEY_ENTER) {
+          // OK (simplified keyboard mapping)
+          float fval = atof(_num_input_buf);
+          int ival = atoi(_num_input_buf);
+          switch (_settings_cursor) {
+          case 2:
+            _node_prefs->freq = fval;
+            break;
+          case 3:
+            _node_prefs->sf = (uint8_t)ival;
+            break;
+          case 4:
+            _node_prefs->bw = fval;
+            break;
+          case 5:
+            _node_prefs->cr = (uint8_t)ival;
+            break;
+          case 6:
+            _node_prefs->tx_power_dbm = (int8_t)ival;
+            break;
+          case 7:
+            _node_prefs->ble_pin = (uint32_t)atoll(_num_input_buf);
+            break;
+          case 10: {
+            int hh = 0, mm = 0;
+            if (sscanf(_num_input_buf, "%d:%d", &hh, &mm) == 2) {
+              struct timeval tv_now;
+              gettimeofday(&tv_now, NULL);
+              time_t t = tv_now.tv_sec;
+              struct tm ti;
+              gmtime_r(&t, &ti);
+              ti.tm_hour = hh;
+              ti.tm_min = mm;
+              ti.tm_sec = 0;
+              struct timeval tv;
+              tv.tv_sec = mktime(&ti);
+              tv.tv_usec = 0;
+              settimeofday(&tv, NULL);
             }
-            if (c == KEY_CANCEL || c == KEY_SELECT) {
-                _num_input_visible = false;
-                return true;
-            }
-        } else {
-            if (c == KEY_DOWN) {
-                _settings_cursor = (_settings_cursor + 1) % 13;
-                if (_settings_cursor >= _settings_scroll + _list_rows) _settings_scroll = _settings_cursor - _list_rows + 1;
-                if (_settings_cursor < _settings_scroll) _settings_scroll = _settings_cursor;
-                return true;
-            }
-            if (c == KEY_UP) {
-                _settings_cursor = (_settings_cursor + 12) % 13;
-                if (_settings_cursor < _settings_scroll) _settings_scroll = _settings_cursor;
-                if (_settings_cursor >= _settings_scroll + _list_rows) _settings_scroll = _settings_cursor - _list_rows + 1;
-                return true;
-            }
-            if (c == KEY_ENTER) {
-                int idx = _settings_cursor;
-                if (idx == 0) applyUKNarrowPreset();
-                else if (idx == 1) {
-                    _editing_node_name = true;
-                    _keyboard_visible = true;
-                    strncpy(_chat_draft, _node_prefs->node_name, sizeof(_chat_draft));
-                } else if (idx >= 2 && idx <= 7) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    const char* l[] = {"","","Freq","SF","BW","CR","TX Power","BLE PIN"};
-                    _num_input_title = l[idx];
-                } else if (idx == 8) {
-                    _node_prefs->gps_enabled = !_node_prefs->gps_enabled;
-                    the_mesh.savePrefs();
-                } else if (idx == 9) {
-                    _node_prefs->buzzer_quiet = !_node_prefs->buzzer_quiet;
-                    the_mesh.savePrefs();
-                } else if (idx == 10) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Time (HH:MM)";
-                } else if (idx == 11) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Latitude";
-                } else if (idx == 12) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Longitude";
-                }
-                return true;
-            }
+            break;
+          }
+          case 11: {
+            _sensors->node_lat = atof(_num_input_buf);
+            the_mesh.savePrefs();
+            break;
+          }
+          case 12: {
+            _sensors->node_lon = atof(_num_input_buf);
+            the_mesh.savePrefs();
+            break;
+          }
+          }
+          the_mesh.savePrefs();
+          _num_input_visible = false;
+          return true;
         }
+        if (c == KEY_CANCEL || c == KEY_SELECT) {
+          _num_input_visible = false;
+          return true;
+        }
+      } else {
+        if (c == KEY_DOWN) {
+          _settings_cursor = (_settings_cursor + 1) % 13;
+          if (_settings_cursor >= _settings_scroll + _list_rows)
+            _settings_scroll = _settings_cursor - _list_rows + 1;
+          if (_settings_cursor < _settings_scroll) _settings_scroll = _settings_cursor;
+          return true;
+        }
+        if (c == KEY_UP) {
+          _settings_cursor = (_settings_cursor + 12) % 13;
+          if (_settings_cursor < _settings_scroll) _settings_scroll = _settings_cursor;
+          if (_settings_cursor >= _settings_scroll + _list_rows)
+            _settings_scroll = _settings_cursor - _list_rows + 1;
+          return true;
+        }
+        if (c == KEY_ENTER) {
+          int idx = _settings_cursor;
+          if (idx == 0)
+            applyUKNarrowPreset();
+          else if (idx == 1) {
+            _editing_node_name = true;
+            _keyboard_visible = true;
+            strncpy(_chat_draft, _node_prefs->node_name, sizeof(_chat_draft));
+          } else if (idx >= 2 && idx <= 7) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            const char *l[] = { "", "", "Freq", "SF", "BW", "CR", "TX Power", "BLE PIN" };
+            _num_input_title = l[idx];
+          } else if (idx == 8) {
+            _node_prefs->gps_enabled = !_node_prefs->gps_enabled;
+            the_mesh.savePrefs();
+          } else if (idx == 9) {
+            _node_prefs->buzzer_quiet = !_node_prefs->buzzer_quiet;
+            the_mesh.savePrefs();
+          } else if (idx == 10) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Time (HH:MM)";
+          } else if (idx == 11) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Latitude";
+          } else if (idx == 12) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Longitude";
+          }
+          return true;
+        }
+      }
     }
 
     return false;
   }
 
   bool handleTouch(int x, int y) override {
-    // 0. Top bar: tap a tab to switch views (always highest priority)
-    if (y < _topbar_h) {
-        int extra_w = 14; 
-        int home_w = (_screen_w / _num_tabs) + extra_w;
-        int other_w = (_screen_w - home_w) / (_num_tabs - 1);
-        
-        int tapped = -1;
-        if (x < home_w) {
-            tapped = 0; // TAB_HOME
-        } else {
-            tapped = 1 + (x - home_w) / other_w;
-        }
-
-        if (tapped >= 0 && tapped < _num_tabs) {
-            Tab t = (Tab)tapped;
-            if (!_is_dashboard && _tab == t) {
-                // Tap active tab again → go back to dashboard
-                _is_dashboard = true;
-                _keyboard_visible = false;
-                _num_input_visible = false;
-                _editing_node_name = false;
-            } else {
-                _tab = t;
-                _is_dashboard = false;
-                _keyboard_visible = false;
-                _num_input_visible = false;
-                _editing_node_name = false;
-                _show_msg_detail = false;
-            }
-        }
+    // 0. Top Bar / Navigation
+    if (y < _status_bar_h) {
+      // Back Button hit area (top-left)
+      if (!_is_dashboard && x < 40) {
+        _is_dashboard = true;
         return true;
+      }
+      // Home Button hit area (Centered Clock in status bar)
+      if (x > _screen_w / 2 - 40 && x < _screen_w / 2 + 40) {
+        _is_dashboard = true;
+        _show_msg_detail = false;
+        _keyboard_visible = false;
+        _num_input_visible = false;
+        return true;
+      }
+      return true; // Absorb touches in status bar
     }
 
     // 1. Global Overlays: Keyboard, NumKeypad, Chat Dropdown
     if (_keyboard_visible) {
-        int kb_h = 160;
-        int kb_y = _screen_h - kb_h;
-        if (y >= kb_y) {
-            int ky = kb_y + 36;
-            int kh = 26;
-            int kw = _screen_w / 10;
-            
-            // Check special keys first (bottom row)
-            int bottom_y = ky + 3 * (kh + 4);
-            // Case toggle (ABC/abc) at (4, bottom_y, 36, kh)
-            if (isInRect(x, y, 4, bottom_y, 36, kh)) {
-                if (_kb_shift == 2) _kb_shift = 1; // From numbers to uppercase
-                else _kb_shift = (_kb_shift == 1) ? 0 : 1; // Toggle between lower and upper
-                return true;
-            }
-            // Mode toggle (123/ABC) at (45, bottom_y, 36, kh)
-            if (isInRect(x, y, 45, bottom_y, 36, kh)) {
-                if (_kb_shift == 2) _kb_shift = 0; // Back to letters
-                else _kb_shift = 2; // Switch to numbers
-                return true;
-            }
-            // Space bar at (86, bottom_y, 98, kh)
-            if (isInRect(x, y, 86, bottom_y, 98, kh)) {
-                int len = strlen(_chat_draft);
-                if (len < sizeof(_chat_draft) - 1) {
-                    _chat_draft[len] = ' ';
-                    _chat_draft[len+1] = 0;
-                }
-                return true;
-            }
-            // Backspace at (190, bottom_y, 55, kh)
-            if (isInRect(x, y, 190, bottom_y, 55, kh)) {
-                int len = strlen(_chat_draft);
-                if (len > 0) _chat_draft[len-1] = 0;
-                return true;
-            }
-            if (isInRect(x, y, 250, bottom_y, 65, kh)) {
-                // SEND / OK
-                if (_editing_node_name) {
-                    StrHelper::strzcpy(_node_prefs->node_name, _chat_draft, sizeof(_node_prefs->node_name));
-                    the_mesh.savePrefs();
-                    _editing_node_name = false;
-                    _keyboard_visible = false;
-                    return true;
-                }
-                if (_chat_draft[0] != 0 && _active_chat_idx != 0xFF) {
-                    uint32_t expected_ack = 0;
-                    if (_active_chat_is_group) {
-                        ChannelDetails ch;
-                        if (the_mesh.getChannel(_active_chat_idx, ch)) {
-                            the_mesh.sendGroupMessage(_rtc->getCurrentTime(), ch.channel, _node_prefs->node_name, _chat_draft, strlen(_chat_draft));
-                            // Use a simple sum-based checksum for repeat detection
-                            expected_ack = 0;
-                            for (int i = 0; _chat_draft[i]; i++) expected_ack += _chat_draft[i];
-                        }
-                    } else {
-                        ContactInfo ci;
-                        if (the_mesh.getContactByIdx(_active_chat_idx, ci)) {
-                            uint32_t est_timeout;
-                            the_mesh.sendMessage(ci, _rtc->getCurrentTime(), 0, _chat_draft, expected_ack, est_timeout);
-                        }
-                    }
-                    // Store in local history too
-                    _task->storeMessage(0, "Me", _chat_draft, _active_chat_idx, _active_chat_is_group, true, expected_ack);
-                    _chat_draft[0] = 0;
-                    _keyboard_visible = false;
-                }
-                return true;
-            }
+      int kb_h = 160;
+      int kb_y = _screen_h - kb_h;
+      if (y >= kb_y) {
+        int ky = kb_y + 36;
+        int kh = 26;
+        int kw = _screen_w / 10;
 
-            // Regular rows
-            const char* krows[3];
-            if (_kb_shift == 0) { krows[0] = "qwertyuiop"; krows[1] = "asdfghjkl"; krows[2] = "zxcvbnm"; }
-            else if (_kb_shift == 1) { krows[0] = "QWERTYUIOP"; krows[1] = "ASDFGHJKL"; krows[2] = "ZXCVBNM"; }
-            else { krows[0] = "1234567890"; krows[1] = "-/()$&@\""; krows[2] = ".,?!'#"; }
-
-            for (int r = 0; r < 3; r++) {
-                int ry = ky + r * (kh + 4);
-                if (y >= ry && y < ry + kh) {
-                    int len = strlen(krows[r]);
-                    int ox = (_screen_w - (len * kw)) / 2;
-                    if (x >= ox && x < ox + len * kw) {
-                        int c_idx = (x - ox) / kw;
-                        int d_len = strlen(_chat_draft);
-                        if (d_len < sizeof(_chat_draft) - 1) {
-                            _chat_draft[d_len] = krows[r][c_idx];
-                            _chat_draft[d_len+1] = 0;
-                        }
-                        return true;
-                    }
-                }
-            }
-            return true; // Absorb all touches in KB area
+        // Check special keys first (bottom row)
+        int bottom_y = ky + 3 * (kh + 4);
+        // Case toggle (ABC/abc) at (4, bottom_y, 36, kh)
+        if (isInRect(x, y, 4, bottom_y, 36, kh)) {
+          if (_kb_shift == 2)
+            _kb_shift = 1; // From numbers to uppercase
+          else
+            _kb_shift = (_kb_shift == 1) ? 0 : 1; // Toggle between lower and upper
+          return true;
         }
+        // Mode toggle (123/ABC) at (45, bottom_y, 36, kh)
+        if (isInRect(x, y, 45, bottom_y, 36, kh)) {
+          if (_kb_shift == 2)
+            _kb_shift = 0; // Back to letters
+          else
+            _kb_shift = 2; // Switch to numbers
+          return true;
+        }
+        // Space bar at (86, bottom_y, 98, kh)
+        if (isInRect(x, y, 86, bottom_y, 98, kh)) {
+          int len = strlen(_chat_draft);
+          if (len < sizeof(_chat_draft) - 1) {
+            _chat_draft[len] = ' ';
+            _chat_draft[len + 1] = 0;
+          }
+          return true;
+        }
+        // Backspace at (190, bottom_y, 55, kh)
+        if (isInRect(x, y, 190, bottom_y, 55, kh)) {
+          int len = strlen(_chat_draft);
+          if (len > 0) _chat_draft[len - 1] = 0;
+          return true;
+        }
+        if (isInRect(x, y, 250, bottom_y, 65, kh)) {
+          // SEND / OK
+          if (_editing_node_name) {
+            StrHelper::strzcpy(_node_prefs->node_name, _chat_draft, sizeof(_node_prefs->node_name));
+            the_mesh.savePrefs();
+            _editing_node_name = false;
+            _keyboard_visible = false;
+            return true;
+          }
+          if (_chat_draft[0] != 0 && _active_chat_idx != 0xFF) {
+            uint32_t expected_ack = 0;
+            if (_active_chat_is_group) {
+              ChannelDetails ch;
+              if (the_mesh.getChannel(_active_chat_idx, ch)) {
+                the_mesh.sendGroupMessage(_rtc->getCurrentTime(), ch.channel, _node_prefs->node_name,
+                                          _chat_draft, strlen(_chat_draft));
+                // Use a simple sum-based checksum for repeat detection
+                expected_ack = 0;
+                for (int i = 0; _chat_draft[i]; i++)
+                  expected_ack += _chat_draft[i];
+              }
+            } else {
+              ContactInfo ci;
+              if (the_mesh.getContactByIdx(_active_chat_idx, ci)) {
+                uint32_t est_timeout;
+                the_mesh.sendMessage(ci, _rtc->getCurrentTime(), 0, _chat_draft, expected_ack, est_timeout);
+              }
+            }
+            // Store in local history too
+            _task->storeMessage(0, "Me", _chat_draft, _active_chat_idx, _active_chat_is_group, true,
+                                expected_ack);
+            _chat_draft[0] = 0;
+            _keyboard_visible = false;
+          }
+          return true;
+        }
+
+        // Regular rows
+        const char *krows[3];
+        if (_kb_shift == 0) {
+          krows[0] = "qwertyuiop";
+          krows[1] = "asdfghjkl";
+          krows[2] = "zxcvbnm";
+        } else if (_kb_shift == 1) {
+          krows[0] = "QWERTYUIOP";
+          krows[1] = "ASDFGHJKL";
+          krows[2] = "ZXCVBNM";
+        } else {
+          krows[0] = "1234567890";
+          krows[1] = "-/()$&@\"";
+          krows[2] = ".,?!'#";
+        }
+
+        for (int r = 0; r < 3; r++) {
+          int ry = ky + r * (kh + 4);
+          if (y >= ry && y < ry + kh) {
+            int len = strlen(krows[r]);
+            int ox = (_screen_w - (len * kw)) / 2;
+            if (x >= ox && x < ox + len * kw) {
+              int c_idx = (x - ox) / kw;
+              int d_len = strlen(_chat_draft);
+              if (d_len < sizeof(_chat_draft) - 1) {
+                _chat_draft[d_len] = krows[r][c_idx];
+                _chat_draft[d_len + 1] = 0;
+              }
+              return true;
+            }
+          }
+        }
+        return true; // Absorb all touches in KB area
+      }
     }
     if (_num_input_visible) {
-        int kw = (_content_w - 20) / 3;
-        int kh = (_screen_h - _list_y - 6 - 60) / 4;
-        const char* nkeys[12] = {"1","2","3","4","5","6","7","8","9",".","0","X"};
-        if (strstr(_num_input_title, "Set Time") != NULL) nkeys[9] = ":";
-        for (int i = 0; i < 12; i++) {
-            int kx = _content_x + 10 + (i % 3) * kw;
-            int ky = _list_y + 48 + (i / 3) * kh;
-            if (isInRect(x, y, kx, ky, kw, kh)) {
-                if (i == 11) { // X (backspace)
-                    int len = strlen(_num_input_buf);
-                    if (len > 0) _num_input_buf[len-1] = 0;
-                } else if (strlen(_num_input_buf) < sizeof(_num_input_buf) - 1) {
-                    strcat(_num_input_buf, nkeys[i]);
-                }
-                return true;
-            }
+      int kw = (_content_w - 20) / 3;
+      int kh = (_screen_h - _list_y - 6 - 60) / 4;
+      const char *nkeys[12] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "X" };
+      if (strstr(_num_input_title, "Set Time") != NULL) nkeys[9] = ":";
+      for (int i = 0; i < 12; i++) {
+        int kx = _content_x + 10 + (i % 3) * kw;
+        int ky = _list_y + 48 + (i / 3) * kh;
+        if (isInRect(x, y, kx, ky, kw, kh)) {
+          if (i == 11) { // X (backspace)
+            int len = strlen(_num_input_buf);
+            if (len > 0) _num_input_buf[len - 1] = 0;
+          } else if (strlen(_num_input_buf) < sizeof(_num_input_buf) - 1) {
+            strcat(_num_input_buf, nkeys[i]);
+          }
+          return true;
         }
-        // OK Button hit area (moved to top-right)
-        if (isInRect(x, y, _content_x + _content_w - 45, _list_y + 8, 40, 24)) {
-            // OK
-            float fval = atof(_num_input_buf);
-            int ival = atoi(_num_input_buf);
-            switch(_settings_cursor) {
-                case 2: _node_prefs->freq = fval; break;
-                case 3: _node_prefs->sf = (uint8_t)ival; break;
-                case 4: _node_prefs->bw = fval; break;
-                case 5: _node_prefs->cr = (uint8_t)ival; break;
-                case 6: _node_prefs->tx_power_dbm = (int8_t)ival; break;
-                case 7: _node_prefs->ble_pin = (uint32_t)atoll(_num_input_buf); break;
-                case 10: {
-                    int hh = 0, mm = 0;
-                    if (sscanf(_num_input_buf, "%d:%d", &hh, &mm) == 2) {
-                        struct timeval tv_now;
-                        gettimeofday(&tv_now, NULL);
-                        time_t t = tv_now.tv_sec;
-                        struct tm ti;
-                        gmtime_r(&t, &ti);
-                        ti.tm_hour = hh;
-                        ti.tm_min = mm;
-                        ti.tm_sec = 0;
-                        struct timeval tv;
-                        tv.tv_sec = mktime(&ti);
-                        tv.tv_usec = 0;
-                        settimeofday(&tv, NULL);
-                    }
-                    break;
-                }
-                case 11: _sensors->node_lat = fval; break;
-                case 12: _sensors->node_lon = fval; break;
-            }
-            the_mesh.savePrefs();
-            _num_input_visible = false;
-            return true;
+      }
+      // OK Button hit area (moved to top-right)
+      if (isInRect(x, y, _content_x + _content_w - 45, _list_y + 8, 40, 24)) {
+        // OK
+        float fval = atof(_num_input_buf);
+        int ival = atoi(_num_input_buf);
+        switch (_settings_cursor) {
+        case 2:
+          _node_prefs->freq = fval;
+          break;
+        case 3:
+          _node_prefs->sf = (uint8_t)ival;
+          break;
+        case 4:
+          _node_prefs->bw = fval;
+          break;
+        case 5:
+          _node_prefs->cr = (uint8_t)ival;
+          break;
+        case 6:
+          _node_prefs->tx_power_dbm = (int8_t)ival;
+          break;
+        case 7:
+          _node_prefs->ble_pin = (uint32_t)atoll(_num_input_buf);
+          break;
+        case 10: {
+          int hh = 0, mm = 0;
+          if (sscanf(_num_input_buf, "%d:%d", &hh, &mm) == 2) {
+            struct timeval tv_now;
+            gettimeofday(&tv_now, NULL);
+            time_t t = tv_now.tv_sec;
+            struct tm ti;
+            gmtime_r(&t, &ti);
+            ti.tm_hour = hh;
+            ti.tm_min = mm;
+            ti.tm_sec = 0;
+            struct timeval tv;
+            tv.tv_sec = mktime(&ti);
+            tv.tv_usec = 0;
+            settimeofday(&tv, NULL);
+          }
+          break;
         }
-        return true; // Absorb all touches in NumKeypad area
+        case 11:
+          _sensors->node_lat = fval;
+          break;
+        case 12:
+          _sensors->node_lon = fval;
+          break;
+        }
+        the_mesh.savePrefs();
+        _num_input_visible = false;
+        return true;
+      }
+      return true; // Absorb all touches in NumKeypad area
     }
 
-
-
-
-    // 3. Dashboard: Tile selection (Launcher)
+    // 3. Carousel: Scroll Navigation and Tile Selection
     if (_is_dashboard) {
-        // Match drawDashboard geometry EXACTLY
-        int margin = 8;
-        int grid_w = _content_w - (margin * 2);
-        int tw = (grid_w - (margin * (_grid_cols - 1))) / _grid_cols;
-        int th = 75;
-        int total_h = (_grid_rows * th) + ((_grid_rows - 1) * margin);
-        int start_y = (_screen_h - total_h) / 2;
+      int icon_th = 105;
+      int btn_h = 56;
+      int btn_y = _screen_h - btn_h - 4;
+      int btn_w = (_screen_w / 2) - 8;
+      int start_y = _status_bar_h + 10;
 
-        for (int i = 0; i < TAB_COUNT - 1; i++) { // Iterate through all tabs for dashboard
-            int col = i % _grid_cols;
-            int row = i / _grid_cols;
-            int tx = _content_x + margin + col * (tw + margin);
-            int ty = start_y + row * (th + margin);
-
-            if (isInRect(x, y, tx, ty, tw, th)) {
-                _tab = (Tab)i;
-                _is_dashboard = false;
-                _show_msg_detail = false; // Reset detail view when changing tabs
-                return true;
-            }
-        }
+      // Bottom Left: PREV Button
+      if (isInRect(x, y, 0, btn_y, _screen_w / 2, btn_h + 8)) {
+        _carousel_scroll = (_carousel_scroll + TAB_COUNT - 2) % (TAB_COUNT - 1);
         return true;
+      }
+      // Bottom Right: NEXT Button
+      if (isInRect(x, y, _screen_w / 2, btn_y, _screen_w / 2, btn_h + 8)) {
+        _carousel_scroll = (_carousel_scroll + 1) % (TAB_COUNT - 1);
+        return true;
+      }
+
+      // Tiles in the middle
+      int tw = _screen_w / 3;
+      for (int i = 0; i < 3; i++) {
+        int tx = i * tw;
+        if (isInRect(x, y, tx, start_y, tw, icon_th)) {
+          int tab_idx = (_carousel_scroll + i) % (TAB_COUNT - 1);
+          _tab = (Tab)tab_idx;
+          _is_dashboard = false;
+          return true;
+        }
+      }
+      return true;
     }
 
     // 4. Tab-Specific Content
     if (_tab == TAB_CONFIG) {
-        // Scroll buttons
-        int btn_x = _content_x + _content_w - _scroll_btn_w;
-        if (isInRect(x, y, btn_x, _list_y, _scroll_btn_w, 40)) {
-            if (_settings_scroll > 0) _settings_scroll--;
-            return true;
-        }
-        if (isInRect(x, y, btn_x, _screen_h - 40, _scroll_btn_w, 40)) {
-            if (_settings_scroll + _list_rows < 13) _settings_scroll++;
-            return true;
-        }
-
-        int list_w = _content_w - _scroll_btn_w - 4;
-        for (int i = 0; i < _list_rows; i++) {
-            int idx = _settings_scroll + i;
-            if (idx >= 13) break;
-            int iy = _list_y + i * _row_h;
-            if (isInRect(x, y, _content_x + 1, iy, list_w - 2, _row_h - 1)) {
-                _settings_cursor = idx;
-                if (idx == 0) applyUKNarrowPreset();
-                else if (idx == 1) {
-                    _editing_node_name = true;
-                    _keyboard_visible = true;
-                    strncpy(_chat_draft, _node_prefs->node_name, sizeof(_chat_draft));
-                } else if (idx >= 2 && idx <= 7) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    const char* l[] = {"","","Freq","SF","BW","CR","TX Power","BLE PIN"};
-                    _num_input_title = l[idx];
-                } else if (idx == 8) {
-                    _node_prefs->gps_enabled = !_node_prefs->gps_enabled;
-                    the_mesh.savePrefs();
-                } else if (idx == 9) {
-                    _node_prefs->buzzer_quiet = !_node_prefs->buzzer_quiet;
-                    the_mesh.savePrefs();
-                } else if (idx == 10) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Time (HH:MM)";
-                } else if (idx == 11) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Latitude";
-                } else if (idx == 12) {
-                    _num_input_visible = true;
-                    _num_input_buf[0] = 0;
-                    _num_input_title = "Set Longitude";
-                }
-                return true;
-            }
-        }
+      // Scroll buttons
+      int btn_x = _content_x + _content_w - _scroll_btn_w;
+      if (isInRect(x, y, btn_x, _list_y, _scroll_btn_w, 40)) {
+        if (_settings_scroll > 0) _settings_scroll--;
         return true;
+      }
+      if (isInRect(x, y, btn_x, _screen_h - 40, _scroll_btn_w, 40)) {
+        if (_settings_scroll + _list_rows < 13) _settings_scroll++;
+        return true;
+      }
+
+      int list_w = _content_w - _scroll_btn_w - 4;
+      for (int i = 0; i < _list_rows; i++) {
+        int idx = _settings_scroll + i;
+        if (idx >= 13) break;
+        int iy = _list_y + i * _row_h;
+        if (isInRect(x, y, _content_x + 1, iy, list_w - 2, _row_h - 1)) {
+          _settings_cursor = idx;
+          if (idx == 0)
+            applyUKNarrowPreset();
+          else if (idx == 1) {
+            _editing_node_name = true;
+            _keyboard_visible = true;
+            strncpy(_chat_draft, _node_prefs->node_name, sizeof(_chat_draft));
+          } else if (idx >= 2 && idx <= 7) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            const char *l[] = { "", "", "Freq", "SF", "BW", "CR", "TX Power", "BLE PIN" };
+            _num_input_title = l[idx];
+          } else if (idx == 8) {
+            _node_prefs->gps_enabled = !_node_prefs->gps_enabled;
+            the_mesh.savePrefs();
+          } else if (idx == 9) {
+            _node_prefs->buzzer_quiet = !_node_prefs->buzzer_quiet;
+            the_mesh.savePrefs();
+          } else if (idx == 10) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Time (HH:MM)";
+          } else if (idx == 11) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Latitude";
+          } else if (idx == 12) {
+            _num_input_visible = true;
+            _num_input_buf[0] = 0;
+            _num_input_title = "Set Longitude";
+          }
+          return true;
+        }
+      }
+      return true;
     }
 
     if (_tab == TAB_CHAT) {
@@ -1866,57 +2048,57 @@ public:
 
       // Dropdown button - open dropdown OR handle taps if already open
       if (_chat_dropdown_open) {
-          int dx = _content_x + 10;
-          int dy = _list_y + 26;
-          int dw = _content_w - 20;
-          int total_h = 135;
-          int btn_area_w = 50;
-          int ch_h = 24;
-          int max_visible = 5;
+        int dx = _content_x + 10;
+        int dy = _list_y + 26;
+        int dw = _content_w - 20;
+        int total_h = 135;
+        int btn_area_w = 50;
+        int ch_h = 24;
+        int max_visible = 5;
 
-          // Scroll Buttons (Larger and further right)
-          int btn_x = dx + dw - btn_area_w;
-          if (isInRect(x, y, btn_x, dy, btn_area_w, 45)) {
-              if (_dropdown_scroll > 0) _dropdown_scroll--;
-              return true;
-          }
-          if (isInRect(x, y, btn_x, dy + total_h - 45, btn_area_w, 45)) {
-              _dropdown_scroll++;
-              return true;
-          }
-
-          // Channel entries
-          for (int i = 0; i < max_visible; i++) {
-              int iy = dy + 6 + i * ch_h;
-              if (isInRect(x, y, dx + 4, iy, dw - btn_area_w - 10, ch_h)) {
-                  int ch_idx = _dropdown_scroll + i;
-                  ChannelDetails ch;
-                  if (the_mesh.getChannel(ch_idx, ch)) {
-                      _active_chat_idx = ch_idx;
-                      _active_chat_is_group = true;
-                  }
-                  _chat_dropdown_open = false;
-                  return true;
-              }
-          }
-          // Tap outside
-          if (!isInRect(x, y, dx, dy, dw, total_h)) {
-              _chat_dropdown_open = false;
-          }
+        // Scroll Buttons (Larger and further right)
+        int btn_x = dx + dw - btn_area_w;
+        if (isInRect(x, y, btn_x, dy, btn_area_w, 45)) {
+          if (_dropdown_scroll > 0) _dropdown_scroll--;
           return true;
+        }
+        if (isInRect(x, y, btn_x, dy + total_h - 45, btn_area_w, 45)) {
+          _dropdown_scroll++;
+          return true;
+        }
+
+        // Channel entries
+        for (int i = 0; i < max_visible; i++) {
+          int iy = dy + 6 + i * ch_h;
+          if (isInRect(x, y, dx + 4, iy, dw - btn_area_w - 10, ch_h)) {
+            int ch_idx = _dropdown_scroll + i;
+            ChannelDetails ch;
+            if (the_mesh.getChannel(ch_idx, ch)) {
+              _active_chat_idx = ch_idx;
+              _active_chat_is_group = true;
+            }
+            _chat_dropdown_open = false;
+            return true;
+          }
+        }
+        // Tap outside
+        if (!isInRect(x, y, dx, dy, dw, total_h)) {
+          _chat_dropdown_open = false;
+        }
+        return true;
       }
 
       if (isInRect(x, y, _content_x + 4, _list_y + 4, _content_w - 8, 22)) {
-          _chat_dropdown_open = true;
-          return true;
+        _chat_dropdown_open = true;
+        return true;
       }
 
       // Input field
       int input_y = _screen_h - 26;
       if (isInRect(x, y, _content_x + 1, input_y - 1, _content_w - 2, 26)) {
-          _editing_node_name = false;
-          _keyboard_visible = true;
-          return true;
+        _editing_node_name = false;
+        _keyboard_visible = true;
+        return true;
       }
 
       int total = _task->getStoredMessageCount();
@@ -1946,8 +2128,6 @@ public:
       }
       return true;
     }
-
-
 
     if (_tab == TAB_NODES) {
       the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
@@ -2027,23 +2207,23 @@ public:
 };
 
 class MsgPreviewScreen : public UIScreen {
-  UITask* _task;
-  mesh::RTCClock* _rtc;
+  UITask *_task;
+  mesh::RTCClock *_rtc;
 
   struct MsgEntry {
     uint32_t timestamp;
     char origin[62];
     char msg[78];
   };
-  #define MAX_UNREAD_MSGS   32
+#define MAX_UNREAD_MSGS 32
   int num_unread;
   int head = MAX_UNREAD_MSGS - 1; // index of latest unread message
   MsgEntry unread[MAX_UNREAD_MSGS];
 
 public:
-  MsgPreviewScreen(UITask* task, mesh::RTCClock* rtc) : _task(task), _rtc(rtc) { num_unread = 0; }
+  MsgPreviewScreen(UITask *task, mesh::RTCClock *rtc) : _task(task), _rtc(rtc) { num_unread = 0; }
 
-  void addPreview(uint8_t path_len, const char* from_name, const char* msg) {
+  void addPreview(uint8_t path_len, const char *from_name, const char *msg) {
     head = (head + 1) % MAX_UNREAD_MSGS;
     if (num_unread < MAX_UNREAD_MSGS) num_unread++;
 
@@ -2052,12 +2232,12 @@ public:
     if (path_len == 0xFF) {
       sprintf(p->origin, "(D) %s:", from_name);
     } else {
-      sprintf(p->origin, "(%d) %s:", (uint32_t) path_len, from_name);
+      sprintf(p->origin, "(%d) %s:", (uint32_t)path_len, from_name);
     }
     StrHelper::strncpy(p->msg, msg, sizeof(p->msg));
   }
 
-  int render(DisplayDriver& display) override {
+  int render(DisplayDriver &display) override {
     char tmp[16];
     display.setColor(DisplayDriver::DARK);
     display.fillRect(0, 0, display.width(), display.height());
@@ -2072,15 +2252,15 @@ public:
     int secs = _rtc->getCurrentTime() - p->timestamp;
     if (secs < 60) {
       sprintf(tmp, "%ds", secs);
-    } else if (secs < 60*60) {
+    } else if (secs < 60 * 60) {
       sprintf(tmp, "%dm", secs / 60);
     } else {
-      sprintf(tmp, "%dh", secs / (60*60));
+      sprintf(tmp, "%dh", secs / (60 * 60));
     }
     display.setCursor(display.width() - display.getTextWidth(tmp) - 2, 0);
     display.print(tmp);
 
-    display.drawRect(0, 11, display.width(), 1);  // horiz line
+    display.drawRect(0, 11, display.width(), 1); // horiz line
 
     display.setCursor(0, 14);
     display.setColor(DisplayDriver::LIGHT);
@@ -2107,7 +2287,7 @@ public:
       return true;
     }
     if (c == KEY_ENTER) {
-      num_unread = 0;  // clear unread queue
+      num_unread = 0; // clear unread queue
       _task->gotoHomeScreen();
       return true;
     }
@@ -2115,7 +2295,7 @@ public:
   }
 };
 
-void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* node_prefs) {
+void UITask::begin(DisplayDriver *display, SensorManager *sensors, NodePrefs *node_prefs) {
   _display = display;
   _sensors = sensors;
   _auto_off = millis() + AUTO_OFF_MILLIS;
@@ -2127,7 +2307,8 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   analog_btn.begin();
 #endif
 
-#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && defined(TOUCH_SPI_MISO)
+#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && \
+    defined(TOUCH_SPI_MISO)
   pinMode(TOUCH_IRQ, INPUT_PULLUP);
   xpt2046_spi.begin(TOUCH_SPI_SCK, TOUCH_SPI_MISO, TOUCH_SPI_MOSI, TOUCH_CS);
   xpt2046_ready = xpt2046.begin(xpt2046_spi);
@@ -2143,7 +2324,7 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   if (_sensors != NULL && _node_prefs != NULL) {
     _sensors->setSettingValue("gps", _node_prefs->gps_enabled ? "1" : "0");
     if (_node_prefs->gps_interval > 0) {
-      char interval_str[12];  // Max: 24 hours = 86400 seconds (5 digits + null)
+      char interval_str[12]; // Max: 24 hours = 86400 seconds (5 digits + null)
       sprintf(interval_str, "%u", _node_prefs->gps_interval);
       _sensors->setSettingValue("gps_interval", interval_str);
     }
@@ -2172,14 +2353,14 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   setCurrScreen(splash);
 }
 
-void UITask::showAlert(const char* text, int duration_millis) {
+void UITask::showAlert(const char *text, int duration_millis) {
   strcpy(_alert, text);
   _alert_expiry = millis() + duration_millis;
 }
 
 void UITask::notify(UIEventType t) {
 #if defined(PIN_BUZZER)
-switch(t){
+  switch (t) {
   case UIEventType::contactMessage:
     // gemini's pick
     buzzer.play("MsgRcv3:d=4,o=6,b=200:32e,32g,32b,16c7");
@@ -2195,22 +2376,23 @@ switch(t){
   case UIEventType::none:
   default:
     break;
-}
+  }
 #endif
 
 #ifdef PIN_VIBRATION
   // Trigger vibration for all UI events except none
   if (t != UIEventType::none) {
-      vibration.trigger();
+    vibration.trigger();
   }
 #endif
 }
 
-void UITask::storeMessage(uint8_t path_len, const char* from_name, const char* text, uint8_t channel_idx, bool is_group, bool is_sent, uint32_t ack_hash) {
+void UITask::storeMessage(uint8_t path_len, const char *from_name, const char *text, uint8_t channel_idx,
+                          bool is_group, bool is_sent, uint32_t ack_hash) {
   _messages_head = (_messages_head + 1) % MAX_STORED_MESSAGES;
   if (_messages_count < MAX_STORED_MESSAGES) _messages_count++;
 
-  MessageEntry& e = _messages[_messages_head];
+  MessageEntry &e = _messages[_messages_head];
   e.timestamp = rtc_clock.getCurrentTime();
   e.channel_idx = channel_idx;
   e.is_group = is_group;
@@ -2232,16 +2414,16 @@ void UITask::updateMessageAck(uint32_t ack_hash) {
   }
 }
 
-bool UITask::getStoredMessage(int newest_index, MessageEntry& out) const {
+bool UITask::getStoredMessage(int newest_index, MessageEntry &out) const {
   if (_messages_count <= 0 || _messages_head < 0) return false;
   if (newest_index < 0 || newest_index >= _messages_count) return false;
 
   int idx = _messages_head - newest_index;
-  while (idx < 0) idx += MAX_STORED_MESSAGES;
+  while (idx < 0)
+    idx += MAX_STORED_MESSAGES;
   out = _messages[idx];
   return true;
 }
-
 
 void UITask::msgRead(int msgcount) {
   _msgcount = msgcount;
@@ -2250,28 +2432,27 @@ void UITask::msgRead(int msgcount) {
   }
 }
 
-void UITask::newMsg(uint8_t path_len, const char* from_name, const char* text, int msgcount, uint8_t channel_idx, bool is_group) {
+void UITask::newMsg(uint8_t path_len, const char *from_name, const char *text, int msgcount,
+                    uint8_t channel_idx, bool is_group) {
   _msgcount = msgcount;
- 
+
   storeMessage(path_len, from_name, text, channel_idx, is_group);
-  
+
   if (home != NULL) {
-      HomeScreen* hs = (HomeScreen*)home;
+    HomeScreen *hs = (HomeScreen *)home;
+    hs->setUnread(HomeScreen::TAB_CHAT);
+    if (channel_idx != 0xFF || is_group) {
       hs->setUnread(HomeScreen::TAB_CHAT);
-      if (channel_idx != 0xFF || is_group) {
-          hs->setUnread(HomeScreen::TAB_CHAT);
-      }
+    }
   }
 
   setCurrScreen(home);
 
   if (_display != NULL) {
-    if (!_display->isOn() && !hasConnection()) {
-      _display->turnOn();
-    }
+    // POWER SAVING: Don't auto-wake screen for messages per user request
     if (_display->isOn()) {
-    _auto_off = millis() + AUTO_OFF_MILLIS;  // extend the auto-off timer
-    _next_refresh = 0;  // trigger refresh
+      _auto_off = millis() + AUTO_OFF_MILLIS; // extend the auto-off timer
+      _next_refresh = 0;                      // trigger refresh
     }
   }
 }
@@ -2297,7 +2478,7 @@ void UITask::userLedHandler() {
 #endif
 }
 
-void UITask::setCurrScreen(UIScreen* c) {
+void UITask::setCurrScreen(UIScreen *c) {
   curr = c;
   if (_display != NULL && _display->isOn()) {
     _display->clear();
@@ -2308,9 +2489,9 @@ void UITask::setCurrScreen(UIScreen* c) {
 /*
   hardware-agnostic pre-shutdown activity should be done here
 */
-void UITask::shutdown(bool restart){
+void UITask::shutdown(bool restart) {
 
-  #ifdef PIN_BUZZER
+#ifdef PIN_BUZZER
   /* note: we have a choice here -
      we can do a blocking buzzer.loop() with non-deterministic consequences
      or we can set a flag and delay the shutdown for a couple of seconds
@@ -2321,7 +2502,7 @@ void UITask::shutdown(bool restart){
   while (buzzer.isPlaying() && (millis() - 2500) < buzzer_timer)
     buzzer.loop();
 
-  #endif // PIN_BUZZER
+#endif // PIN_BUZZER
 
   if (restart) {
     _board->reboot();
@@ -2347,7 +2528,7 @@ void UITask::loop() {
   if (ev == BUTTON_EVENT_CLICK) {
     c = checkDisplayOn(KEY_ENTER);
   } else if (ev == BUTTON_EVENT_LONG_PRESS) {
-    c = handleLongPress(KEY_ENTER);  // REVISIT: could be mapped to different key code
+    c = handleLongPress(KEY_ENTER); // REVISIT: could be mapped to different key code
   }
   ev = joystick_left.check();
   if (ev == BUTTON_EVENT_CLICK) {
@@ -2392,7 +2573,8 @@ void UITask::loop() {
     _analogue_pin_read_millis = millis();
   }
 #endif
-#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && defined(TOUCH_SPI_MISO)
+#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && \
+    defined(TOUCH_SPI_MISO)
   if (c == 0 && xpt2046_ready) {
     bool is_down = xpt2046.touched();
     if (is_down) {
@@ -2434,14 +2616,14 @@ void UITask::loop() {
 
   if (c != 0 && curr) {
     curr->handleInput(c);
-    _auto_off = millis() + AUTO_OFF_MILLIS;   // extend auto-off timer
-    _next_refresh = 0;  // trigger refresh
+    _auto_off = millis() + AUTO_OFF_MILLIS; // extend auto-off timer
+    _next_refresh = 0;                      // trigger refresh
   }
 
   userLedHandler();
 
 #ifdef PIN_BUZZER
-  if (buzzer.isPlaying())  buzzer.loop();
+  if (buzzer.isPlaying()) buzzer.loop();
 #endif
 
   if (curr) curr->poll();
@@ -2450,24 +2632,25 @@ void UITask::loop() {
     if (millis() >= _next_refresh && curr) {
       _display->startFrame();
       int delay_millis = curr->render(*_display);
-      if (millis() < _alert_expiry) {  // render alert popup
+      if (millis() < _alert_expiry) { // render alert popup
         _display->setTextSize(1);
         int y = _display->height() / 3;
         int p = _display->height() / 32;
         _display->setColor(DisplayDriver::DARK);
-        _display->fillRect(p, y, _display->width() - p*2, y);
-        _display->setColor(DisplayDriver::LIGHT);  // draw box border
-        _display->drawRect(p, y, _display->width() - p*2, y);
-        _display->drawTextCentered(_display->width() / 2, y + p*3, _alert);
-        _next_refresh = _alert_expiry;   // will need refresh when alert is dismissed
-      } else {
+        _display->fillRect(p, y, _display->width() - p * 2, y);
+        _display->setColor(DisplayDriver::LIGHT); // draw box border
+        _display->drawRect(p, y, _display->width() - p * 2, y);
+        _display->drawTextCentered(_display->width() / 2, y + p * 3, _alert);
+        _next_refresh = _alert_expiry; // will need refresh when alert is dismissed
+      } else if (_next_refresh != 0) { // Only update if no screen change occurred inside render
         if (delay_millis <= 0) {
-          _next_refresh = 0xFFFFFFFFUL;  // event-driven: no periodic redraw
+          _next_refresh = 0xFFFFFFFFUL; // event-driven: no periodic redraw
         } else {
           _next_refresh = millis() + (uint32_t)delay_millis;
         }
       }
-#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && defined(TOUCH_SPI_MISO)
+#if defined(TOUCH_CS) && defined(TOUCH_IRQ) && defined(TOUCH_SPI_SCK) && defined(TOUCH_SPI_MOSI) && \
+    defined(TOUCH_SPI_MISO)
       drawTouchDebugDot(*_display);
 #endif
       _display->endFrame();
@@ -2488,9 +2671,9 @@ void UITask::loop() {
     uint16_t milliVolts = getBattMilliVolts();
     if (milliVolts > 0 && milliVolts < AUTO_SHUTDOWN_MILLIVOLTS) {
 
-      // show low battery shutdown alert
-      // we should only do this for eink displays, which will persist after power loss
-      #if defined(THINKNODE_M1) || defined(LILYGO_TECHO)
+// show low battery shutdown alert
+// we should only do this for eink displays, which will persist after power loss
+#if defined(THINKNODE_M1) || defined(LILYGO_TECHO)
       if (_display != NULL) {
         _display->startFrame();
         _display->setTextSize(2);
@@ -2499,10 +2682,9 @@ void UITask::loop() {
         _display->drawTextCentered(_display->width() / 2, 40, "Shutting Down!");
         _display->endFrame();
       }
-      #endif
+#endif
 
       shutdown();
-
     }
     next_batt_chck = millis() + 8000;
   }
@@ -2512,19 +2694,19 @@ void UITask::loop() {
 char UITask::checkDisplayOn(char c) {
   if (_display != NULL) {
     if (!_display->isOn()) {
-      _display->turnOn();   // turn display on and consume event
+      _display->turnOn(); // turn display on and consume event
       c = 0;
     }
-    _auto_off = millis() + AUTO_OFF_MILLIS;   // extend auto-off timer
-    _next_refresh = 0;  // trigger refresh
+    _auto_off = millis() + AUTO_OFF_MILLIS; // extend auto-off timer
+    _next_refresh = 0;                      // trigger refresh
   }
   return c;
 }
 
 char UITask::handleLongPress(char c) {
-  if (millis() - ui_started_at < 8000) {   // long press in first 8 seconds since startup -> CLI/rescue
+  if (millis() - ui_started_at < 8000) { // long press in first 8 seconds since startup -> CLI/rescue
     the_mesh.enterCLIRescue();
-    c = 0;   // consume event
+    c = 0; // consume event
   }
   return c;
 }
@@ -2551,12 +2733,12 @@ bool UITask::getGPSState() {
         return !strcmp(_sensors->getSettingValue(i), "1");
       }
     }
-  } 
+  }
   return false;
 }
 
 void UITask::toggleGPS() {
-    if (_sensors != NULL) {
+  if (_sensors != NULL) {
     // toggle GPS on/off
     int num = _sensors->getNumSettings();
     for (int i = 0; i < num; i++) {
@@ -2580,17 +2762,17 @@ void UITask::toggleGPS() {
 }
 
 void UITask::toggleBuzzer() {
-    // Toggle buzzer quiet mode
-  #ifdef PIN_BUZZER
-    if (buzzer.isQuiet()) {
-      buzzer.quiet(false);
-      notify(UIEventType::ack);
-    } else {
-      buzzer.quiet(true);
-    }
-    _node_prefs->buzzer_quiet = buzzer.isQuiet();
-    the_mesh.savePrefs();
-    showAlert(buzzer.isQuiet() ? "Buzzer: OFF" : "Buzzer: ON", 800);
-    _next_refresh = 0;  // trigger refresh
-  #endif
+  // Toggle buzzer quiet mode
+#ifdef PIN_BUZZER
+  if (buzzer.isQuiet()) {
+    buzzer.quiet(false);
+    notify(UIEventType::ack);
+  } else {
+    buzzer.quiet(true);
+  }
+  _node_prefs->buzzer_quiet = buzzer.isQuiet();
+  the_mesh.savePrefs();
+  showAlert(buzzer.isQuiet() ? "Buzzer: OFF" : "Buzzer: ON", 800);
+  _next_refresh = 0; // trigger refresh
+#endif
 }
