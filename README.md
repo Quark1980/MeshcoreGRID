@@ -2,25 +2,25 @@
 
 ![MeshCore Touch](logo/touch.png)
 
-MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects. This specialized **"TOUCH" Edition** is optimized for the Heltec v4 (ESP32-S3), featuring a premium dark-mode UI and full touch interactivity.
+MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects. This specialized **"TOUCH" Edition** is optimized for the Heltec v4 (ESP32-S3), featuring a dark-mode UI and touch interactivity.
 
 > [!WARNING]
 > **BETA VERSION**: This project is in active development. Features and UI are subject to change.
 
-## 📱 Premium Tactical Touch UI
+## 📱 Touch Interface Overview
 
 ![GUI Example](logo/gui_example.png)
 
 > [!NOTE]
-> **GUI Disclaimer**: The image above is a **digital mockup** intended to demonstrate the general layout and aesthetic goals of the interface. The actual on-device graphics, icons, and layout details may differ in the current build.
+> **GUI Disclaimer**: The image above is a **digital mockup** intended to demonstrate the general layout and functional goals of the interface. The actual on-device graphics, icons, and layout details may differ in current software builds.
 
-The "TOUCH" edition features a custom-built, high-performance UI designed for a deep tactical aesthetic and mission-critical reliability.
+The "TOUCH" edition features a custom-built interface designed for high-contrast visibility and reliable operation on embedded hardware.
 
 ### Key interface features:
-- **Tactical Aesthetic**: Deep Tactical Black backgrounds with High-Visibility Tactical Amber/Orange accents.
-- **Fluent Navigation**: intuitive 3-icon carousel for quick access to core functions.
-- **Ergonomic Design**: Enlarged touch targets and full QWERTY keyboard for field use.
-- **Real-time Intel**: Tactical status bar showing unread messages (✉), node counts (⛫), and battery vitals.
+- **High-Contrast UI**: Black background with Amber/Orange accents for visibility in various lighting conditions.
+- **Navigation**: 3-icon carousel for access to core functions.
+- **Ergonomic Design**: Enlarged touch targets and a QWERTY keyboard for direct input.
+- **Status Indicators**: Bar showing unread messages (✉), node counts (⛫), and battery status.
 
 ---
 
@@ -34,7 +34,7 @@ If you just want to get up and running quickly with the latest stable build:
    ```bash
    esptool.py --chip esp32s3 write_flash 0x10000 bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin
    ```
-3. **Enjoy**: The device will boot directly into the touch interface!
+3. **Finish**: The device will boot directly into the touch interface.
 
 ---
 
@@ -72,28 +72,28 @@ For developers who want to customize or contribute to the project:
 | **Touch** | T_CS     | GPIO 3        |
 | **Touch** | T_IRQ    | GPIO 4        |
 
-### Connection Tips:
+### Connection Details:
 - **Shared SPI Bus**: `SCLK` (GPIO 17) and `MOSI` (GPIO 33) are shared. Wire both components to these same physical pins.
-- **Dedicated CS**: TFT uses `GPIO 15`, Touch uses `GPIO 3`.
+- **Dedicated Chip Select**: TFT uses `GPIO 15`, Touch uses `GPIO 3`.
 - **Power**: Connect `VCC` to `3.3V` or `VEXT`. Ensure the external power rail is enabled if using `VEXT`.
 
 ---
 
-## 🚀 Technical Features
+## 🚀 Software Features
 
-- **Custom Icon Pack**: High-resolution 64x64 RGB565 icons.
-- **Multi-Module Navigation**:
-  - **CLOCK**: Large time/date display.
-  - **CHAT**: Encrypted messaging with unread indicators.
-  - **NODE**: Dynamic discovery and hop-count tracking.
-  - **RADIO/CFG**: Full hardware and device configuration.
-  - **LOG/BLE/PWR**: System diagnostics and power management.
-- **Propagation Tracking**: Real-time `Me:X` counter for mesh propagation status.
-- **App Sync**: BLE Interception keeps device history in sync with MeshCore Mobile.
-- **Optimization**: Intelligent backlight and redraw management for power efficiency.
+- **Custom Icons**: High-resolution 64x64 RGB565 icons.
+- **Module Navigation**:
+  - **CLOCK**: Time and date display.
+  - **CHAT**: Encrypted messaging with unread status.
+  - **NODE**: Discovery and node tracking.
+  - **RADIO/CFG**: Hardware and device configuration.
+  - **LOG/BLE/PWR**: Diagnostics and power management.
+- **Message Tracking**: Counter for mesh propagation status.
+- **External Sync**: BLE integration maintains history with external applications like MeshCore Mobile.
+- **Efficiency**: Backlight and redraw management for power reduction.
 
 > [!NOTE]
-> **Experimental Features**: 'Repeats Heard' and updated BLE logic are currently in testing. Please report any edge cases.
+> **Development Status**: Certain features like propagation tracking and updated BLE logic are in testing. Please report any issues.
 
 ---
 *Created by Quark1980 & The MeshCore Community*
