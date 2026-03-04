@@ -7,37 +7,57 @@ MeshCore is a lightweight, portable C++ library that enables multi-hop packet ro
 > [!WARNING]
 > **BETA VERSION**: This project is in active development. Features and UI are subject to change.
 
-## 💎 Featured Build: Heltec v4 "TOUCH"
+## 📱 Premium Tactical Touch UI
 
-Optimized for the ESP32-S3 with a 320x240 ST7789 TFT and XPT2046 touch controller.
+![GUI Example](logo/gui_example.png)
 
-### ⚡ HOWTO: Quick Start (Flashing)
-If you just want to get up and running quickly:
-1. **Download**: [Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin](./bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin) (Latest: MeshCore v1.13.0 + Touch v1.2.3)
-   - Older: [heltec_v4_meshcore_touch.bin](./bin/heltec_v4_meshcore_touch.bin)
+> [!NOTE]
+> **GUI Disclaimer**: The image above is a **digital mockup** intended to demonstrate the general layout and aesthetic goals of the interface. The actual on-device graphics, icons, and layout details may differ in the current build.
+
+The "TOUCH" edition features a custom-built, high-performance UI designed for a deep tactical aesthetic and mission-critical reliability.
+
+### Key interface features:
+- **Tactical Aesthetic**: Deep Tactical Black backgrounds with High-Visibility Tactical Amber/Orange accents.
+- **Fluent Navigation**: intuitive 3-icon carousel for quick access to core functions.
+- **Ergonomic Design**: Enlarged touch targets and full QWERTY keyboard for field use.
+- **Real-time Intel**: Tactical status bar showing unread messages (✉), node counts (⛫), and battery vitals.
+
+---
+
+## ⚡ Quick Start (Flashing)
+
+If you just want to get up and running quickly with the latest stable build:
+
+1. **Download**: [Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin](./bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin)
+   - *MeshCore v1.13.0 + Touch v1.2.3*
 2. **Flash**: Use the [MeshCore Flasher](https://flasher.meshcore.co.uk) (select Custom File) or use `esptool`:
    ```bash
    esptool.py --chip esp32s3 write_flash 0x10000 bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin
    ```
-3. **Enjoy**: The device will boot into the premium touch interface!
+3. **Enjoy**: The device will boot directly into the touch interface!
 
-### 🛠️ HOWTO: Building from Source
-For developers who want to customize the project:
-1. **Prerequisites**: Install [Visual Studio Code](https://code.visualstudio.com/) and the [PlatformIO IDE](https://platformio.org/) extension.
-2. **Clone**: 
+---
+
+## 🛠️ Building from Source
+
+For developers who want to customize or contribute to the project:
+
+1. **Prerequisites**: [Visual Studio Code](https://code.visualstudio.com/) + [PlatformIO IDE](https://platformio.org/).
+2. **Clone & Build**:
    ```bash
    git clone https://github.com/Quark1980/Meshcore-Touch.git
-   ```
-3. **Build**:
-   ```bash
    pio run -e heltec_v4_tft_touch_companion_radio_ble
    ```
-4. **Upload**:
+3. **Upload**:
    ```bash
    pio run -e heltec_v4_tft_touch_companion_radio_ble --target upload
    ```
 
-#### 🔌 Wiring Diagram (Heltec v4 to ST7789 + XPT2046)
+---
+
+## 🔌 Hardware Connection Guide
+
+### Wiring Diagram (Heltec v4 to ST7789 + XPT2046)
 
 | Component | Function | Heltec v4 Pin |
 |-----------|----------|---------------|
@@ -52,40 +72,28 @@ For developers who want to customize the project:
 | **Touch** | T_CS     | GPIO 3        |
 | **Touch** | T_IRQ    | GPIO 4        |
 
-### 🔧 Physical Connection Guide
-To get your Heltec V4 working with a 2.4" or 2.8" SPI TFT (ST7789) and Touch (XPT2046):
-
-1. **Shared SPI Bus**: Note that `SCLK` (GPIO 17) and `MOSI` (GPIO 33) are shared between both the display and the touch controller. You must wire both components to these same physical pins on the Heltec.
-2. **Dedicated Chip Selects**: Each component has its own `CS` pin (`GPIO 15` for TFT, `GPIO 3` for Touch) to allow the ESP32-S3 to talk to them individually.
-3. **Power (3.3V)**: Connect the `VCC` of both the TFT and Touch to the Heltec's `3.3V` or `VEXT` pin. If using `VEXT`, ensure your code or configuration enables the external power rail.
-4. **Backlight**: The code expects the backlight to be hardwired or managed. For Heltec V4, ensure your ground connections are solid to avoid flicker.
-
-## 📱 Premium Tactical Touch UI
-![GUI Example](logo/gui_example.png)
-The "TOUCH" edition features a custom-built, high-performance UI designed for a deep tactical aesthetic and mission-critical reliability:
-
-- **Tactical Icon Pack**: High-resolution, custom 64x64 RGB565 icons (gears, mesh networks, compasses, radios) replacing standard flat designs.
-- **Military-Industrial Aesthetic**: A cohesive color palette featuring Deep Tactical Black backgrounds, Warm Steel Grey frames, and High-Visibility Tactical Amber/Orange accents.
-- **3-Icon Carousel Navigation**: Fluent, touch-friendly carousel with prominent tiles. Functions include:
-  - **CLOCK**: Large, centered time display with date.
-  - **CHAT**: Read and send encrypted messages, view channel history, with an unread message indicator.
-  - **NODE**: Discover and track active mesh nodes dynamically with hop counts.
-  - **RADIO**: Access radio settings and hardware info.
-  - **CFG (Config)**: General device settings and preferences.
-  - **LOG**: View system logs and debug information.
-  - **BLE/LINK**: Manage Bluetooth connections and PIN pairing.
-  - **PWR**: Power menu and calibration.
-- **Ergonomic Touch Targets**: Enlarged Back buttons and intuitive overlays for easy finger tapping with gloves or in the field.
-- **Tactical Status Bar**: Real-time counters for unread messages (✉) and discovered nodes (⛫), plus accurate battery voltage intel.
-- **Full QWERTY Keyboard**: Compose messages directly on-screen with quick-toggle Shift/Number pads.
-- **Repeats Heard Tracking (NEW)**: Real-time counter (`Me:X`) showing mesh propagation status for sent messages.
-- **BLE Interception (NEW)**: Device chat history stay in sync with activity from external BLE apps (like MeshCore Mobile).
-- **Power Efficiency**: Intelligent backlight management, splash screen auto-dismiss, and optimized redraws.
+### Connection Tips:
+- **Shared SPI Bus**: `SCLK` (GPIO 17) and `MOSI` (GPIO 33) are shared. Wire both components to these same physical pins.
+- **Dedicated CS**: TFT uses `GPIO 15`, Touch uses `GPIO 3`.
+- **Power**: Connect `VCC` to `3.3V` or `VEXT`. Ensure the external power rail is enabled if using `VEXT`.
 
 ---
+
+## 🚀 Technical Features
+
+- **Custom Icon Pack**: High-resolution 64x64 RGB565 icons.
+- **Multi-Module Navigation**:
+  - **CLOCK**: Large time/date display.
+  - **CHAT**: Encrypted messaging with unread indicators.
+  - **NODE**: Dynamic discovery and hop-count tracking.
+  - **RADIO/CFG**: Full hardware and device configuration.
+  - **LOG/BLE/PWR**: System diagnostics and power management.
+- **Propagation Tracking**: Real-time `Me:X` counter for mesh propagation status.
+- **App Sync**: BLE Interception keeps device history in sync with MeshCore Mobile.
+- **Optimization**: Intelligent backlight and redraw management for power efficiency.
+
 > [!NOTE]
-> **Experimental Features**: The 'Repeats Heard' and updated BLE logic are currently in testing. While highly functional, please report any edge cases in our community.
+> **Experimental Features**: 'Repeats Heard' and updated BLE logic are currently in testing. Please report any edge cases.
 
 ---
 *Created by Quark1980 & The MeshCore Community*
-
