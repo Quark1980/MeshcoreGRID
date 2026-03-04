@@ -61,6 +61,7 @@ To get your Heltec V4 working with a 2.4" or 2.8" SPI TFT (ST7789) and Touch (XP
 4. **Backlight**: The code expects the backlight to be hardwired or managed. For Heltec V4, ensure your ground connections are solid to avoid flicker.
 
 ## 📱 Premium Tactical Touch UI
+![GUI Example](logo/gui_example.png)
 The "TOUCH" edition features a custom-built, high-performance UI designed for a deep tactical aesthetic and mission-critical reliability:
 
 - **Tactical Icon Pack**: High-resolution, custom 64x64 RGB565 icons (gears, mesh networks, compasses, radios) replacing standard flat designs.
