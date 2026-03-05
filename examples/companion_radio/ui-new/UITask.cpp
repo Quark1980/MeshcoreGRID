@@ -1,9 +1,10 @@
 #include "UITask.h"
 
+#include "../../../src/gui/ChannelSelectorView.h"
 #include "../../../src/helpers/TxtDataHelpers.h"
 #include "../../../src/helpers/ui/DisplayDriver.h"
 #include "../../../src/helpers/ui/UIScreen.h"
-#include "../MyMesh.h"
+#include "UI_Bridge.h"
 #include "target.h"
 
 #include <Arduino.h>
@@ -165,7 +166,7 @@ static const uint8_t icon_nodes_16[] = { 0xff, 0xff, 0xff, 0xff, 0xbf, 0xff, 0xf
 static const uint8_t icon_radio_16[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xd7, 0xff, 0xdb, 0xef, 0xc7, 0xff,
                                          0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                                          0xff, 0xff, 0x7b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-static const uint8_t icon_settings_16[] = { 0xff, 0xff, 0xff, 0xff, 0x3f, 0xf8, 0x3f, 0xf0, 0x0f, 0xe0,   0x6f,
+static const uint8_t icon_settings_16[] = { 0xff, 0xff, 0xff, 0xff, 0x3f, 0xf8, 0x3f, 0xf0, 0x0f, 0xe0, 0x6f,
                                             0xef, 0xef, 0xe9, 0xef, 0xeb, 0x0f, 0xe0, 0x3f, 0xf0, 0x3f, 0xf0,
                                             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 static const uint8_t icon_log_16[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0xff,
@@ -234,6 +235,9 @@ public:
     snprintf(base_info, sizeof(base_info), "MeshCore %s | Touch UI %s", _version_info, TOUCH_UI_VERSION);
     display.drawTextCentered(mid_x, sh - 12, base_info);
 
+    // Memory Guard (Smart Purge)
+    _task->checkMemoryStability();
+
     if (now_ms >= dismiss_after) {
       _task->gotoHomeScreen();
       return 0;
@@ -283,9 +287,6 @@ private:
   bool _keyboard_visible;
   int _kb_shift;    // 0=lower, 1=upper, 2=symbols/numbers
   int _chat_scroll; // scroll offset for chat messages
-  bool _chat_dropdown_open;
-  int _dropdown_scroll; // scroll offset for channel dropdown
-  int _dropdown_drag_y; // last touch y for drag-to-scroll
 
   bool _show_msg_detail;
   int _msg_cursor;
@@ -319,6 +320,23 @@ private:
   mesh::RTCClock *_rtc;
   SensorManager *_sensors;
   NodePrefs *_node_prefs;
+
+public:
+  void resetToDashboard() {
+    _is_dashboard = true;
+    _tab = TAB_HOME;
+    _show_msg_detail = false;
+    _keyboard_visible = false;
+    _num_input_visible = false;
+    _editing_node_name = false;
+  }
+
+  void selectChannel(uint8_t idx, bool is_group) {
+    _active_chat_idx = idx;
+    _active_chat_is_group = is_group;
+    _tab = TAB_CHAT;
+    _is_dashboard = false;
+  }
 
   // Cached layout (updated every render).
   int _screen_w = 320;
@@ -499,7 +517,7 @@ private:
     display.drawTextLeftAlign(50, 8, m_str);
 
     // 3. Discovered Nodes (⛫) - Right of Clock
-    the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
+    UI_Bridge::getInstance().getNearbyNodes(recent, UI_RECENT_LIST_SIZE);
     int nodes = 0;
     for (int i = 0; i < UI_RECENT_LIST_SIZE; i++)
       if (recent[i].name[0]) nodes++;
@@ -509,9 +527,8 @@ private:
     display.drawTextRightAlign(_screen_w - 95, 8, n_str);
 
     // 4. Signal Strength Bars (Rugged Blue/Cyan) - Further Left
-    // Overlaid by Back Button in sub-screens
     if (_is_dashboard) {
-      float rssi = radio_driver.getLastRSSI();
+      float rssi = UI_Bridge::getInstance().getLastRSSI();
       int active_bars = 0;
       if (rssi > -65)
         active_bars = 4;
@@ -563,7 +580,7 @@ private:
     // Node name - moved up slightly
     display.setColor(DisplayDriver::NEON_CYAN);
     display.setTextSize(2);
-    display.drawTextCentered(x + w / 2, _list_y + 2, the_mesh.getNodeName());
+    display.drawTextCentered(x + w / 2, _list_y + 2, UI_Bridge::getInstance().getNodeName());
     display.setTextSize(1);
 
     // 1. Large Clock
@@ -599,7 +616,7 @@ private:
     display.drawTextLeftAlign(x + 20, stat_y, msg_str);
 
     // Nearby Nodes
-    the_mesh.getRecentlyHeard(recent, UI_RECENT_LIST_SIZE);
+    UI_Bridge::getInstance().getNearbyNodes(recent, UI_RECENT_LIST_SIZE);
     int active_nodes = 0;
     for (int i = 0; i < UI_RECENT_LIST_SIZE; i++) {
       if (recent[i].name[0] != 0) active_nodes++;
@@ -610,7 +627,7 @@ private:
 
     // 3. Signal Strength Indicator
     int sig_y = stat_y + 25;
-    float rssi = radio_driver.getLastRSSI();
+    float rssi = UI_Bridge::getInstance().getLastRSSI();
 
     // Draw 5 bars
     int bar_w = 12;
@@ -641,7 +658,8 @@ private:
 
     // Text below bars
     char sig_str[32];
-    snprintf(sig_str, sizeof(sig_str), "RSSI: %.0f dBm  SNR: %.1f", rssi, radio_driver.getLastSNR());
+    snprintf(sig_str, sizeof(sig_str), "RSSI: %.0f dBm  SNR: %.1f", rssi,
+             UI_Bridge::getInstance().getLastSNR());
     display.setColor(DisplayDriver::SLATE_GREY);
     display.drawTextCentered(x + w / 2, sig_y + 38, sig_str);
   }
@@ -949,7 +967,7 @@ private:
     if (w > 200) btn_w = 140;
     int btn_x = _screen_w - btn_w - _scroll_btn_w - 6;
     int btn_y = _status_bar_h + 6;
-    drawButton(display, btn_x, btn_y, btn_w, 22, ch_name, _chat_dropdown_open);
+    drawButton(display, btn_x, btn_y, btn_w, 22, ch_name, false);
 
     // Bottom: Input Field
     int input_y = _screen_h - 26;
@@ -1134,7 +1152,6 @@ private:
     }
 
     if (_keyboard_visible) renderKeyboard(display);
-    if (_chat_dropdown_open) renderChatDropdown(display);
   }
 
   // --- Word-wrapping helpers ---
@@ -1318,52 +1335,6 @@ private:
     display.drawTextCentered(x + w / 2, y + (h - 12) / 2, label);
   }
 
-  void renderChatDropdown(DisplayDriver &display) {
-    int dx = _content_x + 10;
-    int dy = _status_bar_h + 30; // Move under new dropdown position
-    int dw = _content_w - 20;
-    int total_h = 135; // Enough for 5 items + header/footer
-    display.setColor(DisplayDriver::DARK);
-    display.fillRect(dx, dy, dw, total_h);
-    display.setColor(DisplayDriver::SLATE_GREY);
-    display.drawRect(dx, dy, dw, total_h);
-
-    int total_channels = 0;
-    ChannelDetails temp_ch;
-    for (int i = 0; i < MAX_GROUP_CHANNELS; i++) {
-      if (the_mesh.getChannel(i, temp_ch))
-        total_channels++;
-      else
-        break;
-    }
-
-    int max_visible = 5;
-    int ch_h = 24;
-    int btn_area_w = 50;
-    int list_w = dw - btn_area_w - 6;
-
-    // Up scroll (top right)
-    bool can_up = (_dropdown_scroll > 0);
-    drawButton(display, dx + dw - btn_area_w, dy + 2, btn_area_w, 40, "^", can_up);
-
-    // Down scroll (bottom right)
-    bool can_down = (_dropdown_scroll + max_visible < total_channels);
-    drawButton(display, dx + dw - btn_area_w, dy + total_h - 42, btn_area_w, 40, "v", can_down);
-
-    // Channel entries
-    for (int i = 0; i < max_visible; i++) {
-      int ch_idx = _dropdown_scroll + i;
-      ChannelDetails ch;
-      if (!the_mesh.getChannel(ch_idx, ch)) break;
-      int iy = dy + 6 + i * ch_h;
-      bool active = (ch_idx == _active_chat_idx && _active_chat_is_group);
-      display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::SLATE_GREY);
-      display.drawRoundRect(dx + 4, iy, list_w, ch_h - 2, 2);
-      display.setColor(active ? DisplayDriver::NEON_CYAN : DisplayDriver::LIGHT);
-      display.drawTextLeftAlign(dx + 10, iy + 4, ch.name);
-    }
-  }
-
   void renderRadio(DisplayDriver &display) {
     int x = _content_x;
     int w = _content_w;
@@ -1397,36 +1368,39 @@ private:
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 13;
       display.setColor(DisplayDriver::NEON_CYAN);
-      snprintf(tmp, sizeof(tmp), "Noise Floor: %d", radio_driver.getNoiseFloor());
+      snprintf(tmp, sizeof(tmp), "Noise Floor: %d", UI_Bridge::getInstance().getNoiseFloor());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 16;
       display.drawTextLeftAlign(x + 6, y, "Tap Raw for TX/RX diagnostics");
     } else {
       display.setColor(DisplayDriver::LIGHT);
-      snprintf(tmp, sizeof(tmp), "RSSI: %.1f dBm", radio_driver.getLastRSSI());
+      snprintf(tmp, sizeof(tmp), "RSSI: %.1f dBm", UI_Bridge::getInstance().getLastRSSI());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "SNR:  %.2f dB", radio_driver.getLastSNR());
+      snprintf(tmp, sizeof(tmp), "SNR:  %.2f dB", UI_Bridge::getInstance().getLastSNR());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Noise Floor: %d", radio_driver.getNoiseFloor());
+      snprintf(tmp, sizeof(tmp), "Noise Floor: %d", UI_Bridge::getInstance().getNoiseFloor());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Pkts RX/TX: %lu / %lu", (unsigned long)radio_driver.getPacketsRecv(),
-               (unsigned long)radio_driver.getPacketsSent());
+      snprintf(tmp, sizeof(tmp), "Pkts RX/TX: %lu / %lu",
+               (unsigned long)UI_Bridge::getInstance().getPacketsRecv(),
+               (unsigned long)UI_Bridge::getInstance().getPacketsSent());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Flood TX/RX: %lu / %lu", (unsigned long)the_mesh.getNumSentFlood(),
-               (unsigned long)the_mesh.getNumRecvFlood());
+      snprintf(tmp, sizeof(tmp), "Flood TX/RX: %lu / %lu",
+               (unsigned long)UI_Bridge::getInstance().getNumSentFlood(),
+               (unsigned long)UI_Bridge::getInstance().getNumRecvFlood());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
-      snprintf(tmp, sizeof(tmp), "Direct TX/RX: %lu / %lu", (unsigned long)the_mesh.getNumSentDirect(),
-               (unsigned long)the_mesh.getNumRecvDirect());
+      snprintf(tmp, sizeof(tmp), "Direct TX/RX: %lu / %lu",
+               (unsigned long)UI_Bridge::getInstance().getNumSentDirect(),
+               (unsigned long)UI_Bridge::getInstance().getNumRecvDirect());
       display.drawTextLeftAlign(x + 6, y, tmp);
       y += 12;
       snprintf(tmp, sizeof(tmp), "Air TX/RX sec: %lu / %lu",
-               (unsigned long)(the_mesh.getTotalAirTime() / 1000),
-               (unsigned long)(the_mesh.getReceiveAirTime() / 1000));
+               (unsigned long)(UI_Bridge::getInstance().getTotalAirTime() / 1000),
+               (unsigned long)(UI_Bridge::getInstance().getReceiveAirTime() / 1000));
       display.drawTextLeftAlign(x + 6, y, tmp);
     }
 
@@ -1665,10 +1639,9 @@ public:
       : _task(task), _rtc(rtc), _sensors(sensors), _node_prefs(node_prefs), _tab(TAB_HOME),
         _is_dashboard(true), _show_msg_detail(false), _msg_cursor(0), _msg_scroll(0), _nearby_scroll(0),
         _settings_cursor(0), _settings_scroll(0), _active_chat_idx(0), _active_chat_is_group(true),
-        _keyboard_visible(false), _kb_shift(0), _chat_scroll(0), _chat_dropdown_open(false),
-        _dropdown_scroll(0), _dropdown_drag_y(-1), _radio_raw_mode(false), _editing_node_name(false),
-        _power_armed(false), _power_armed_until(0), _msg_unread(false), _chat_unread(false),
-        _num_input_visible(false) {
+        _keyboard_visible(false), _kb_shift(0), _chat_scroll(0), _radio_raw_mode(false),
+        _editing_node_name(false), _power_armed(false), _power_armed_until(0), _msg_unread(false),
+        _chat_unread(false), _num_input_visible(false) {
     _chat_draft[0] = 0;
     _num_input_buf[0] = 0;
     _num_input_title = "";
@@ -1904,14 +1877,17 @@ public:
     if (y < _status_bar_h) {
       // Back Button hit area (top-left, enlarged width)
       if (!_is_dashboard && x < 75) {
-        _is_dashboard = true;
-        _keyboard_visible = false;
-        _num_input_visible = false;
-        _editing_node_name = false;
-        _chat_dropdown_open = false;
-        _show_msg_detail = false;
-        _chat_draft[0] = 0;
-        _num_input_buf[0] = 0;
+        if (_tab == TAB_CHAT) {
+          _task->gotoChannelSelector();
+        } else {
+          _is_dashboard = true;
+          _keyboard_visible = false;
+          _num_input_visible = false;
+          _editing_node_name = false;
+          _show_msg_detail = false;
+          _chat_draft[0] = 0;
+          _num_input_buf[0] = 0;
+        }
         return true;
       }
       // Home Button hit area (Centered Clock in status bar)
@@ -2150,8 +2126,12 @@ public:
         int tx = i * tw;
         if (isInRect(x, y, tx, start_y, tw, icon_th)) {
           int tab_idx = (_carousel_scroll + i) % (TAB_COUNT - 1);
-          _tab = (Tab)tab_idx;
-          _is_dashboard = false;
+          if (tab_idx == TAB_CHAT) {
+            _task->gotoChannelSelector();
+          } else {
+            _tab = (Tab)tab_idx;
+            _is_dashboard = false;
+          }
           return true;
         }
       }
@@ -2223,53 +2203,11 @@ public:
         return true;
       }
 
-      // Dropdown button - open dropdown OR handle taps if already open
-      if (_chat_dropdown_open) {
-        int dx = _content_x + 10;
-        int dy = _status_bar_h + 30;
-        int dw = _content_w - 20;
-        int total_h = 135;
-        int btn_area_w = 50;
-        int ch_h = 24;
-        int max_visible = 5;
-
-        // Scroll Buttons (Larger and further right)
-        int btn_x = dx + dw - btn_area_w;
-        if (isInRect(x, y, btn_x, dy, btn_area_w, 45)) {
-          if (_dropdown_scroll > 0) _dropdown_scroll--;
-          return true;
-        }
-        if (isInRect(x, y, btn_x, dy + total_h - 45, btn_area_w, 45)) {
-          _dropdown_scroll++;
-          return true;
-        }
-
-        // Channel entries
-        for (int i = 0; i < max_visible; i++) {
-          int iy = dy + 6 + i * ch_h;
-          if (isInRect(x, y, dx + 4, iy, dw - btn_area_w - 10, ch_h)) {
-            int ch_idx = _dropdown_scroll + i;
-            ChannelDetails ch;
-            if (the_mesh.getChannel(ch_idx, ch)) {
-              _active_chat_idx = ch_idx;
-              _active_chat_is_group = true;
-            }
-            _chat_dropdown_open = false;
-            return true;
-          }
-        }
-        // Tap outside
-        if (!isInRect(x, y, dx, dy, dw, total_h)) {
-          _chat_dropdown_open = false;
-        }
-        return true;
-      }
-
-      // Check hit area for the dropdown button, using the updated coordinates
+      // Check hit area for the selector button (where the dropdown button used to be)
       int expected_btn_w = (_screen_w > 200) ? 140 : 120;
       int expected_btn_x = _screen_w - expected_btn_w - _scroll_btn_w - 6;
       if (isInRect(x, y, expected_btn_x, _status_bar_h + 6, expected_btn_w, 22)) {
-        _chat_dropdown_open = true;
+        _task->gotoChannelSelector();
         return true;
       }
 
@@ -2523,7 +2461,26 @@ void UITask::begin(DisplayDriver *display, SensorManager *sensors, NodePrefs *no
   splash = new SplashScreen(this);
   home = new HomeScreen(this, &rtc_clock, sensors, node_prefs);
   msg_preview = new MsgPreviewScreen(this, &rtc_clock);
+  channel_selector = new ChannelSelectorView(this);
   setCurrScreen(splash);
+}
+
+void UITask::selectChannel(uint8_t idx, bool is_group) {
+  // Logic to actually switch the active chat in HomeScreen
+  // Since we don't have direct access to HomeScreen members here easily without casting,
+  // we can use a helper or just set it if we expose it.
+  // For now, let's assume we use UI_Bridge to track the "active" channel for ChatView.
+
+  // Actually, we should probably update HomeScreen's state.
+  // But since HomeScreen is defined in UITask.cpp, we can just do it.
+  if (home != NULL) {
+    ((HomeScreen *)home)->selectChannel(idx, is_group);
+  }
+
+  // Mark as opened in bridge
+  UI_Bridge::getInstance().switchToChannel(idx, is_group);
+
+  gotoHomeScreen();
 }
 
 void UITask::showAlert(const char *text, int duration_millis) {
@@ -2576,6 +2533,24 @@ void UITask::storeMessage(uint8_t path_len, const char *from_name, const char *t
   e.repeat_id = repeat_id;
   StrHelper::strzcpy(e.origin, from_name, sizeof(e.origin));
   StrHelper::strzcpy(e.text, text, sizeof(e.text));
+
+  // Notify bridge for unread tracking
+  UI_Bridge::getInstance().notifyNewMessage(channel_idx, is_group);
+}
+
+void UITask::purgeOldestMessage() {
+  if (_messages_count > 0) {
+    _messages_count--;
+  }
+}
+
+void UITask::checkMemoryStability() {
+  if (UI_Bridge::getInstance().isLowMemory()) {
+    if (_messages_count > 0) {
+      purgeOldestMessage();
+      showAlert("HEALTH: PURGING", 1500);
+    }
+  }
 }
 
 void UITask::updateMessageAck(uint32_t hash) {
@@ -2651,6 +2626,13 @@ void UITask::userLedHandler() {
     digitalWrite(PIN_STATUS_LED, led_state == LED_STATE_ON);
   }
 #endif
+}
+
+void UITask::gotoHomeScreen(bool reset) {
+  setCurrScreen(home);
+  if (reset && home) {
+    ((HomeScreen *)home)->resetToDashboard();
+  }
 }
 
 void UITask::setCurrScreen(UIScreen *c) {
@@ -2793,6 +2775,13 @@ void UITask::loop() {
     curr->handleInput(c);
     _auto_off = millis() + AUTO_OFF_MILLIS; // extend auto-off timer
     _next_refresh = 0;                      // trigger refresh
+  }
+
+  // Stability Guard
+  static uint32_t last_mem_check = 0;
+  if (millis() - last_mem_check > 5000) {
+    checkMemoryStability();
+    last_mem_check = millis();
   }
 
   userLedHandler();

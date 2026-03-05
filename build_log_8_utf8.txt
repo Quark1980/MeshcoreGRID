@@ -1,0 +1,161 @@
+﻿Processing heltec_v4_tft_touch_companion_radio_ble (board: heltec_v4; platform: platformio/espressif32@6.11.0; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/heltec_v4.html
+PLATFORM: Espressif 32 (6.11.0) > heltec_wifi_lora_32 v4 (16 MB FLASH, 2 MB PSRAM)
+HARDWARE: ESP32S3 240MHz, 2MB RAM, 16MB Flash
+DEBUG: Current (esp-builtin) On-board (esp-builtin) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 1.40501.0 (4.5.1) 
+ - tool-mkfatfs @ 2.0.1 
+ - tool-mklittlefs @ 1.203.210628 (2.3) 
+ - tool-mkspiffs @ 2.230.0 (2.30) 
+ - toolchain-riscv32-esp @ 8.4.0+2021r2-patch5 
+ - toolchain-xtensa-esp32s3 @ 8.4.0+2021r2-patch5
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 67 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- SPI @ 2.0.0
+|-- Wire @ 2.0.0
+|-- RadioLib @ 7.6.0
+|-- Crypto @ 0.4.0
+|-- RTClib @ 2.1.4
+|-- Melopero RV3028 @ 1.2.0
+|-- CayenneLPP @ 1.6.1
+|-- Adafruit INA3221 Library @ 1.0.1
+|-- Adafruit INA219 @ 1.2.3
+|-- INA226 @ 0.6.6
+|-- Adafruit INA260 Library @ 1.5.3
+|-- Adafruit AHTX0 @ 2.0.6
+|-- Adafruit BME280 Library @ 2.3.0
+|-- Adafruit BMP280 Library @ 2.6.8
+|-- Adafruit SHTC3 Library @ 1.0.2
+|-- Sensirion I2C SHT4x @ 1.1.2
+|-- Arduino_LPS22HB @ 1.0.2
+|-- Adafruit MLX90614 Library @ 2.1.6
+|-- Adafruit_VL53L0X @ 1.2.5
+|-- MicroNMEA @ 2.0.6
+|-- Adafruit BME680 Library @ 2.0.6
+|-- Adafruit BMP085 Library @ 1.2.4
+|-- Adafruit ST7735 and ST7789 Library @ 1.11.0
+|-- base64 @ 1.4.0
+|-- XPT2046_Touchscreen @ 1.4.0+sha.f956c5d
+|-- LittleFS @ 2.0.0
+|-- SPIFFS @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- ed25519
+|-- nrf52
+|-- ESP32 BLE Arduino @ 2.0.0
+|-- FS @ 2.0.0
+|-- Adafruit GFX Library @ 1.12.5
+Building in release mode
+Retrieving maximum program size .pio\build\heltec_v4_tft_touch_companion_radio_ble\firmware.elf
+Checking size .pio\build\heltec_v4_tft_touch_companion_radio_ble\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [=         ]   8.8% (used 185008 bytes from 2097152 bytes)
+Flash: [==        ]  22.9% (used 1500313 bytes from 6553600 bytes)
+Configuring upload protocol...
+AVAILABLE: cmsis-dap, esp-bridge, esp-builtin, esp-prog, espota, esptool, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa
+CURRENT: upload_protocol = esptool
+Looking for upload port...
+Using manually specified: COM7
+Forcing reset using 1200bps open/close on port COM7
+Waiting for the new upload port...
+Uploading .pio\build\heltec_v4_tft_touch_companion_radio_ble\firmware.bin
+esptool.py v4.5.1
+Serial port COM6
+Connecting...
+Chip is ESP32-S3 (revision v0.2)
+Features: WiFi, BLE
+Crystal is 40MHz
+MAC: 90:70:69:85:0e:78
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 921600
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00003fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x0000e000 to 0x0000ffff...
+Flash will be erased from 0x00010000 to 0x0017efff...
+Compressed 15104 bytes to 10429...
+Writing at 0x00000000... (100 %)
+Wrote 15104 bytes (10429 compressed) at 0x00000000 in 0.3 seconds (effective 413.8 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 146...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (146 compressed) at 0x00008000 in 0.1 seconds (effective 234.1 kbit/s)...
+Hash of data verified.
+Compressed 8192 bytes to 49...
+Writing at 0x0000e000... (100 %)
+Wrote 8192 bytes (49 compressed) at 0x0000e000 in 0.1 seconds (effective 439.9 kbit/s)...
+Hash of data verified.
+Compressed 1500736 bytes to 862545...
+Writing at 0x00010000... (1 %)
+Writing at 0x00025d78... (3 %)
+Writing at 0x0003140e... (5 %)
+Writing at 0x0003cc41... (7 %)
+Writing at 0x000442b7... (9 %)
+Writing at 0x00049973... (11 %)
+Writing at 0x0004de12... (13 %)
+Writing at 0x00059015... (15 %)
+Writing at 0x000665f8... (16 %)
+Writing at 0x00073544... (18 %)
+Writing at 0x0008306b... (20 %)
+Writing at 0x0008ffe9... (22 %)
+Writing at 0x00095bd9... (24 %)
+Writing at 0x0009b092... (26 %)
+Writing at 0x000a06f0... (28 %)
+Writing at 0x000a61b7... (30 %)
+Writing at 0x000abf03... (32 %)
+Writing at 0x000b1717... (33 %)
+Writing at 0x000b687f... (35 %)
+Writing at 0x000bc58e... (37 %)
+Writing at 0x000c25a7... (39 %)
+Writing at 0x000c8621... (41 %)
+Writing at 0x000cde78... (43 %)
+Writing at 0x000d3f4f... (45 %)
+Writing at 0x000d9609... (47 %)
+Writing at 0x000df27e... (49 %)
+Writing at 0x000e4689... (50 %)
+Writing at 0x000e9ba0... (52 %)
+Writing at 0x000eec54... (54 %)
+Writing at 0x000f4066... (56 %)
+Writing at 0x000f9f50... (58 %)
+Writing at 0x000ff3a9... (60 %)
+Writing at 0x00104df7... (62 %)
+Writing at 0x0010a70a... (64 %)
+Writing at 0x0010ff95... (66 %)
+Writing at 0x00115a8b... (67 %)
+Writing at 0x0011bfce... (69 %)
+Writing at 0x00122123... (71 %)
+Writing at 0x00127921... (73 %)
+Writing at 0x0012c921... (75 %)
+Writing at 0x0013213a... (77 %)
+Writing at 0x0013786a... (79 %)
+Writing at 0x0013cde9... (81 %)
+Writing at 0x0014241c... (83 %)
+Writing at 0x0014782b... (84 %)
+Writing at 0x0014d4dc... (86 %)
+Writing at 0x001529e2... (88 %)
+Writing at 0x0015a62e... (90 %)
+Writing at 0x00161bf3... (92 %)
+Writing at 0x00169d1d... (94 %)
+Writing at 0x0016f4f7... (96 %)
+Writing at 0x00174e5c... (98 %)
+Writing at 0x0017a75a... (100 %)
+Wrote 1500736 bytes (862545 compressed) at 0x00010000 in 10.7 seconds (effective 1122.8 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+========================= [SUCCESS] Took 34.68 seconds =========================
+
+Environment                              Status    Duration
+---------------------------------------  --------  ------------
+heltec_v4_tft_touch_companion_radio_ble  SUCCESS   00:00:34.680
+========================= 1 succeeded in 00:00:34.680 =========================

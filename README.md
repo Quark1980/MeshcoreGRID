@@ -19,6 +19,12 @@ The "TOUCH" edition features a custom-built interface designed for high-contrast
 ### Key interface features:
 - **High-Contrast UI**: Black background with Amber/Orange accents for visibility in various lighting conditions.
 - **Navigation**: 3-icon carousel for access to core functions.
+- **Full-Screen Channel Selector**: 
+  - Access directly from the Dashboard's **CHAT** tile to see all available channels and nodes in a unified list.
+  - Quick toggle tabs for **CHANNELS** and **NODES**.
+  - **Unread Indicators**: Channels with new messages are highlighted with an orange accent bar for instant recognition.
+  - **Fluid Navigation**: Seamless back-button flow (`<`) returns you from a Chat to the Selector, and from the Selector back to the Dashboard.
+  - **Touch-Optimized Scrolling**: Enlarged 60px wide scroll controls ensure reliable operation with gloved or bare fingers.
 - **Ergonomic Design**: Enlarged touch targets and a QWERTY keyboard for direct input.
 - **Status Indicators**: Bar showing unread messages (✉), node counts (⛫), and battery status.
 
@@ -28,11 +34,11 @@ The "TOUCH" edition features a custom-built interface designed for high-contrast
 
 If you just want to get up and running quickly with the latest stable build:
 
-1. **Download**: [Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin](./bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin)
-   - *MeshCore v1.13.0 + Touch v1.2.3*
+1. **Download**: [Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin](./bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin)
+   - *MeshCore v1.13.0 + Touch v1.2.4*
 2. **Flash**: Use the [MeshCore Flasher](https://flasher.meshcore.co.uk) (select Custom File) or use `esptool`:
    ```bash
-   esptool.py --chip esp32s3 write_flash 0x10000 bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.3.bin
+   esptool.py --chip esp32s3 write_flash 0x10000 bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin
    ```
 3. **Finish**: The device will boot directly into the touch interface.
 

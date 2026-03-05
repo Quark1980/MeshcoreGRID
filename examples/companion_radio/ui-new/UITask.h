@@ -42,7 +42,7 @@ public:
   void storeMessage(uint8_t path_len, const char *from_name, const char *text, uint8_t channel_idx = 0xFF,
                     bool is_group = false, bool is_sent = false, uint32_t ack_hash = 0,
                     uint32_t repeat_id = 0) override;
-  void updateMessageAck(uint32_t ack_hash);
+  void updateMessageAck(uint32_t ack_hash) override;
 
 private:
   static const int MAX_STORED_MESSAGES = 24;
@@ -75,6 +75,7 @@ private:
   UIScreen *splash;
   UIScreen *home;
   UIScreen *msg_preview;
+  UIScreen *channel_selector;
   UIScreen *curr;
   MessageEntry _messages[MAX_STORED_MESSAGES];
   int _messages_head = -1; // newest entry index in ring
@@ -87,8 +88,11 @@ private:
   char handleTripleClick(char c);
 
   void setCurrScreen(UIScreen *c);
+  void purgeOldestMessage();
 
 public:
+  void checkMemoryStability();
+
   UITask(mesh::MainBoard *board, BaseSerialInterface *serial)
       : AbstractUITask(board, serial), _display(NULL), _sensors(NULL) {
     next_batt_chck = _next_refresh = 0;
@@ -97,7 +101,9 @@ public:
   }
   void begin(DisplayDriver *display, SensorManager *sensors, NodePrefs *node_prefs);
 
-  void gotoHomeScreen() { setCurrScreen(home); }
+  void gotoHomeScreen(bool reset = false);
+  void gotoChannelSelector() { setCurrScreen(channel_selector); }
+  void selectChannel(uint8_t idx, bool is_group);
   void showAlert(const char *text, int duration_millis);
   int getMsgCount() const { return _msgcount; }
   int getStoredMessageCount() const { return _messages_count; }
