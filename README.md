@@ -30,6 +30,19 @@ The "TOUCH" edition features a custom-built interface designed for high-contrast
 
 ---
 
+## 📱 Standalone & Companion Modes
+
+The **MeshCore Touch** interface provides a powerful, **stand-alone user experience**. Once configured, you can use the device independently to view stored `#channels` and contacts, and send/receive messages in a standard messenger-style interface.
+
+### Key Usage Points:
+- **Companion Radio**: While it offers a standalone UI, it remains a companion radio and maintains all core backend functionality.
+- **Mandatory Setup**: Initial setup, including adding contacts and configuring channels, must be performed using the original **[Meshcore App](https://meshcore.co.uk/apps.html)** over Bluetooth.
+- **Fully Standalone**: Once your contacts and channels are synced via the mobile app, the touch interface is fully usable without an external device.
+- **Future Ready**: The current interface is highly functional for daily use, with more features planned for future updates.
+
+---
+
+
 ## ⚡ Quick Start (Flashing)
 
 If you just want to get up and running quickly with the latest stable build:
