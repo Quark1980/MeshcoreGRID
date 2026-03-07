@@ -279,29 +279,6 @@ class ST7789Spi : public OLEDDisplay {
     this->_RGB=0x00|c>>8|c<<8&0xFF00;
   }
   
-  void fillRectRGB(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
-    if (w == 0 || h == 0) return;
-    set_CS(LOW);
-    _spi->beginTransaction(_spiSettings);
-    
-    // Convert RGB565 to endianness the display expects if needed.
-    // Typical ST7789 via SPI expects High Byte then Low Byte.
-    uint8_t hi = color >> 8;
-    uint8_t lo = color & 0xFF;
-    
-    setAddrWindow(x, y, w, h);
-    
-    uint32_t count = w * h;
-    digitalWrite(_dc, HIGH); // Data mode
-    for(uint32_t i=0; i<count; i++) {
-        _spi->transfer(hi);
-        _spi->transfer(lo);
-    }
-    
-    _spi->endTransaction();
-    set_CS(HIGH);
-  }
-
   void displayOn(void) {
   //sendCommand(DISPLAYON);
   }

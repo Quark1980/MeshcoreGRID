@@ -4,10 +4,7 @@
 HeltecV4Board board;
 
 #if defined(P_LORA_SCLK)
-  #ifndef LORA_SPI_BUS
-    #define LORA_SPI_BUS HSPI
-  #endif
-  static SPIClass spi(LORA_SPI_BUS);
+  static SPIClass spi;
   RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BUSY, spi);
 #else
   RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BUSY);
@@ -27,19 +24,13 @@ AutoDiscoverRTCClock rtc_clock(fallback_clock);
 #endif
 
 #ifdef DISPLAY_CLASS
-  DISPLAY_CLASS display(&(board.periph_power));
+  DISPLAY_CLASS display(NULL);
   MomentaryButton user_btn(PIN_USER_BTN, 1000, true);
 #endif
 
 bool radio_init() {
   fallback_clock.begin();
-#if defined(PIN_BOARD_SDA) && defined(PIN_BOARD_SCL)
-  #if PIN_BOARD_SDA >= 0 && PIN_BOARD_SCL >= 0
-    rtc_clock.begin(Wire);
-  #endif
-#else
   rtc_clock.begin(Wire);
-#endif
   
 #if defined(P_LORA_SCLK)
   return radio.std_init(&spi);

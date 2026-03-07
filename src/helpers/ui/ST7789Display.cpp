@@ -187,30 +187,6 @@ void ST7789Display::drawXbm(int x, int y, const uint8_t* bits, int w, int h) {
   }
 }
 
-void ST7789Display::drawRGBBitmap(int x, int y, const uint16_t* bitmap, int w, int h) {
-  // Scale the RGB565 bitmap drawing coordinates and implement pixel scaling
-  uint16_t startX = x * SCALE_X + X_OFFSET;
-  uint16_t startY = y * SCALE_Y + Y_OFFSET;
-  
-  for (uint16_t by = 0; by < h; by++) {
-    int y1 = startY + (int)(by * SCALE_Y);
-    int y2 = startY + (int)((by + 1) * SCALE_Y);
-    int block_h = y2 - y1;
-    
-    for (uint16_t bx = 0; bx < w; bx++) {
-      int x1 = startX + (int)(bx * SCALE_X);
-      int x2 = startX + (int)((bx + 1) * SCALE_X);
-      int block_w = x2 - x1;
-      
-      uint16_t color = pgm_read_word(bitmap + (by * w) + bx);
-      if (color != 0x0000) { // skip pure black pixels if we want transparency later, or just draw
-        // Use ST7789Spi's direct color pushing if we add a method for it.
-        display.fillRectRGB(x1, y1, block_w, block_h, color);
-      }
-    }
-  }
-}
-
 uint16_t ST7789Display::getTextWidth(const char* str) {
   return display.getStringWidth(str) / SCALE_X;
 }

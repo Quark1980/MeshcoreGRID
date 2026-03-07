@@ -33,7 +33,6 @@ public:
   void fillRect(int x, int y, int w, int h) override;
   void drawRect(int x, int y, int w, int h) override;
   void drawXbm(int x, int y, const uint8_t* bits, int w, int h) override;
-  void drawRGBBitmap(int x, int y, const uint16_t* bitmap, int w, int h) override;
   uint16_t getTextWidth(const char* str) override;
   void endFrame() override;
   virtual bool getTouch(int *x, int *y);

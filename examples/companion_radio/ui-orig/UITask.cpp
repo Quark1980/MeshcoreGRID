@@ -1,7 +1,5 @@
 #include "UITask.h"
 #include <Arduino.h>
-#include "icons.h"
-#include "../ui-new/meshcore_logo_color.h"
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
 
@@ -215,45 +213,17 @@ void UITask::renderCurrScreen() {
     _display->print(tmp);
     _display->setColor(DisplayDriver::YELLOW); // last color will be kept on T114
   } else if ((millis() - ui_started_at) < BOOT_SCREEN_MILLIS) { // boot screen
-    _display->setColor(DisplayDriver::DARK);
-    _display->fillRect(0, 0, _display->width(), _display->height());
+    // meshcore logo
+    _display->setColor(DisplayDriver::BLUE);
+    int logoWidth = 128;
+    _display->drawXbm((_display->width() - logoWidth) / 2, 3, meshcore_logo, logoWidth, 13);
 
-    int mid_x = _display->width() / 2;
-
-    // Calculate fade color: smooth fade in over the first 1000ms
-    uint32_t now = millis();
-    uint32_t elapsed = BOOT_SCREEN_MILLIS - (BOOT_SCREEN_MILLIS - (now - ui_started_at)); // Corrected elapsed time for fade
-    float progress = (float)elapsed / 1000.0f; 
-
-    DisplayDriver::Color textC = DisplayDriver::CHARCOAL;
-    if (progress >= 1.0f) textC = DisplayDriver::LIGHT;
-    else if (progress > 0.8f) textC = DisplayDriver::GREY;
-    else if (progress > 0.5f) textC = DisplayDriver::SLATE_GREY;
-    else if (progress > 0.2f) textC = DisplayDriver::DARK_GREY;
-
-    // 1. MeshCore Colorful Logo
-    if (progress > 0.1f) {
-      _display->drawRGBBitmap(mid_x - (meshcore_logo_color_width / 2), 5, meshcore_logo_color, meshcore_logo_color_width, meshcore_logo_color_height);
-    }
-
-    // 2. Base attribution
-    _display->setColor(textC);
+    // version info
+    _display->setColor(DisplayDriver::LIGHT);
     _display->setTextSize(1);
-    char base_info[64];
-    snprintf(base_info, sizeof(base_info), "Powered by MeshCore %s", _version_info);
-    _display->drawTextCentered(mid_x, meshcore_logo_color_height + 15, base_info);
-
-    // 3. Large "RADIO" Headline
-    _display->setTextSize(6);
-    _display->drawTextCentered(mid_x, meshcore_logo_color_height + 45, "RADIO");
-
-    // 4. Touch Version & Date
-    _display->setTextSize(2);
-    _display->drawTextCentered(mid_x, meshcore_logo_color_height + 115, "v1.1.0 - 2026.02.28");
-
-    // 5. Author Credit
-    _display->setTextSize(1);
-    _display->drawTextCentered(mid_x, meshcore_logo_color_height + 160, "Created by Quark1980");
+    uint16_t textWidth = _display->getTextWidth(_version_info);
+    _display->setCursor((_display->width() - textWidth) / 2, 22);
+    _display->print(_version_info);
   } else {  // home screen
     // node name
     _display->setCursor(0, 0);

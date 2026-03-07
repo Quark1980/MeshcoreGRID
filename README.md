@@ -1,119 +1,117 @@
-# Meshcore-Touch
+## About MeshCore
 
-![MeshCore Touch](logo/touch.png)
+MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
 
-MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects. This specialized **"TOUCH" Edition** is optimized for the Heltec v4 (ESP32-S3), featuring a dark-mode UI and touch interactivity.
+## 🔍 What is MeshCore?
 
-> [!WARNING]
-> **BETA VERSION**: This project is in active development. Features and UI are subject to change.
+MeshCore now supports a range of LoRa devices, allowing for easy flashing without the need to compile firmware manually. Users can flash a pre-built binary using tools like Adafruit ESPTool and interact with the network through a serial console.
+MeshCore provides the ability to create wireless mesh networks, similar to Meshtastic and Reticulum but with a focus on lightweight multi-hop packet routing for embedded projects. Unlike Meshtastic, which is tailored for casual LoRa communication, or Reticulum, which offers advanced networking, MeshCore balances simplicity with scalability, making it ideal for custom embedded solutions., where devices (nodes) can communicate over long distances by relaying messages through intermediate nodes. This is especially useful in off-grid, emergency, or tactical situations where traditional communication infrastructure is unavailable.
 
-## 📱 Touch Interface Overview
+## ⚡ Key Features
 
-![GUI Example](logo/gui_example.png)
+* Multi-Hop Packet Routing
+  * Devices can forward messages across multiple nodes, extending range beyond a single radio's reach.
+  * Supports up to a configurable number of hops to balance network efficiency and prevent excessive traffic.
+  * Nodes use fixed roles where "Companion" nodes are not repeating messages at all to prevent adverse routing paths from being used.
+* Supports LoRa Radios – Works with Heltec, RAK Wireless, and other LoRa-based hardware.
+* Decentralized & Resilient – No central server or internet required; the network is self-healing.
+* Low Power Consumption – Ideal for battery-powered or solar-powered devices.
+* Simple to Deploy – Pre-built example applications make it easy to get started.
 
-> [!NOTE]
-> **GUI Disclaimer**: The image above is a **digital mockup** intended to demonstrate the general layout and functional goals of the interface. The actual on-device graphics, icons, and layout details may differ in current software builds.
+## 🎯 What Can You Use MeshCore For?
 
-The "TOUCH" edition features a custom-built interface designed for high-contrast visibility and reliable operation on embedded hardware.
+* Off-Grid Communication: Stay connected even in remote areas.
+* Emergency Response & Disaster Recovery: Set up instant networks where infrastructure is down.
+* Outdoor Activities: Hiking, camping, and adventure racing communication.
+* Tactical & Security Applications: Military, law enforcement, and private security use cases.
+* IoT & Sensor Networks: Collect data from remote sensors and relay it back to a central location.
 
-### Key interface features:
-- **High-Contrast UI**: Black background with Amber/Orange accents for visibility in various lighting conditions.
-- **Navigation**: 3-icon carousel for access to core functions.
-- **Full-Screen Channel Selector**: 
-  - Access directly from the Dashboard's **CHAT** tile to see all available channels and nodes in a unified list.
-  - Quick toggle tabs for **CHANNELS** and **NODES**.
-  - **Unread Indicators**: Channels with new messages are highlighted with an orange accent bar for instant recognition.
-  - **Fluid Navigation**: Seamless back-button flow (`<`) returns you from a Chat to the Selector, and from the Selector back to the Dashboard.
-  - **Touch-Optimized Scrolling**: Enlarged 60px wide scroll controls ensure reliable operation with gloved or bare fingers.
-- **Ergonomic Design**: Enlarged touch targets and a QWERTY keyboard for direct input.
-- **Status Indicators**: Bar showing unread messages (✉), node counts (⛫), and battery status.
+## 🚀 How to Get Started
 
----
+- Watch the [MeshCore Intro Video](https://www.youtube.com/watch?v=t1qne8uJBAc) by Andy Kirby.
+- Read through our [Frequently Asked Questions](./docs/faq.md) section.
+- Flash the MeshCore firmware on a supported device.
+- Connect with a supported client.
 
-## 📱 Standalone & Companion Modes
+For developers;
 
-The **MeshCore Touch** interface provides a powerful, **stand-alone user experience**. Once configured, you can use the device independently to view stored `#channels` and contacts, and send/receive messages in a standard messenger-style interface.
+- Install [PlatformIO](https://docs.platformio.org) in [Visual Studio Code](https://code.visualstudio.com).
+- Clone and open the MeshCore repository in Visual Studio Code.
+- See the example applications you can modify and run:
+  - [Companion Radio](./examples/companion_radio) - For use with an external chat app, over BLE, USB or WiFi.
+  - [KISS Modem](./examples/kiss_modem) - Serial KISS protocol bridge for host applications. ([protocol docs](./docs/kiss_modem_protocol.md))
+  - [Simple Repeater](./examples/simple_repeater) - Extends network coverage by relaying messages.
+  - [Simple Room Server](./examples/simple_room_server) - A simple BBS server for shared Posts.
+  - [Simple Secure Chat](./examples/simple_secure_chat) - Secure terminal based text communication between devices.
+  - [Simple Sensor](./examples/simple_sensor) - Remote sensor node with telemetry and alerting.
 
-### Key Usage Points:
-- **Companion Radio**: While it offers a standalone UI, it remains a companion radio and maintains all core backend functionality.
-- **Mandatory Setup**: Initial setup, including adding contacts and configuring channels, must be performed using the original **[Meshcore App](https://meshcore.co.uk/apps.html)** over Bluetooth.
-- **Fully Standalone**: Once your contacts and channels are synced via the mobile app, the touch interface is fully usable without an external device.
-- **Future Ready**: The current interface is highly functional for daily use, with more features planned for future updates.
+The Simple Secure Chat example can be interacted with through the Serial Monitor in Visual Studio Code, or with a Serial USB Terminal on Android.
 
----
+## ⚡️ MeshCore Flasher
 
+We have prebuilt firmware ready to flash on supported devices.
 
-## ⚡ Quick Start (Flashing)
+- Launch https://flasher.meshcore.co.uk
+- Select a supported device
+- Flash one of the firmware types:
+  - Companion, Repeater or Room Server
+- Once flashing is complete, you can connect with one of the MeshCore clients below.
 
-If you just want to get up and running quickly with the latest stable build:
+## 📱 MeshCore Clients
 
-1. **Download**: [Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin](./bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin)
-   - *MeshCore v1.13.0 + Touch v1.2.4*
-2. **Flash**: Use the [MeshCore Flasher](https://flasher.meshcore.co.uk) (select Custom File) or use `esptool`:
-   ```bash
-   esptool.py --chip esp32s3 write_flash 0x10000 bin/Heltec_v4_2.4inch_touchUI_v1.13.0_v1.2.4.bin
-   ```
-3. **Finish**: The device will boot directly into the touch interface.
+**Companion Firmware**
 
----
+The companion firmware can be connected to via BLE, USB or WiFi depending on the firmware type you flashed.
 
-## 🛠️ Building from Source
+- Web: https://app.meshcore.nz
+- Android: https://play.google.com/store/apps/details?id=com.liamcottle.meshcore.android
+- iOS: https://apps.apple.com/us/app/meshcore/id6742354151?platform=iphone
+- NodeJS: https://github.com/liamcottle/meshcore.js
+- Python: https://github.com/fdlamotte/meshcore-cli
 
-For developers who want to customize or contribute to the project:
+**Repeater and Room Server Firmware**
 
-1. **Prerequisites**: [Visual Studio Code](https://code.visualstudio.com/) + [PlatformIO IDE](https://platformio.org/).
-2. **Clone & Build**:
-   ```bash
-   git clone https://github.com/Quark1980/Meshcore-Touch.git
-   pio run -e heltec_v4_tft_touch_companion_radio_ble
-   ```
-3. **Upload**:
-   ```bash
-   pio run -e heltec_v4_tft_touch_companion_radio_ble --target upload
-   ```
+The repeater and room server firmwares can be setup via USB in the web config tool.
 
----
+- https://config.meshcore.dev
 
-## 🔌 Hardware Connection Guide
+They can also be managed via LoRa in the mobile app by using the Remote Management feature.
 
-### Wiring Diagram (Heltec v4 to ST7789 + XPT2046)
+## 🛠 Hardware Compatibility
 
-| Component | Function | Heltec v4 Pin |
-|-----------|----------|---------------|
-| **TFT**   | SCLK     | GPIO 17       |
-| **TFT**   | MOSI/SDA | GPIO 33       |
-| **TFT**   | CS       | GPIO 15       |
-| **TFT**   | DC       | GPIO 16       |
-| **TFT**   | RESET    | GPIO 18       |
-| **Touch** | T_CLK    | GPIO 17       |
-| **Touch** | T_DIN    | GPIO 33       |
-| **Touch** | T_DO     | GPIO 42       |
-| **Touch** | T_CS     | GPIO 3        |
-| **Touch** | T_IRQ    | GPIO 4        |
+MeshCore is designed for devices listed in the [MeshCore Flasher](https://flasher.meshcore.co.uk)
 
-### Connection Details:
-- **Shared SPI Bus**: `SCLK` (GPIO 17) and `MOSI` (GPIO 33) are shared. Wire both components to these same physical pins.
-- **Dedicated Chip Select**: TFT uses `GPIO 15`, Touch uses `GPIO 3`.
-- **Power**: Connect `VCC` to `3.3V` or `VEXT`. Ensure the external power rail is enabled if using `VEXT`.
+## 📜 License
 
----
+MeshCore is open-source software released under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
 
-## 🚀 Software Features
+## Contributing
 
-- **Updated Icon Pack (March 2026)**: New high-contrast symbols for better legibility at all scales.
-- **Custom Icons**: High-resolution 64x64 RGB565 icons.
-- **Module Navigation**:
-  - **CLOCK**: Time and date display.
-  - **CHAT**: Encrypted messaging with unread status.
-  - **NODE**: Discovery and node tracking.
-  - **RADIO/CFG**: Hardware and device configuration.
-  - **LOG/BLE/PWR**: Diagnostics and power management.
-- **Message Tracking**: Counter for mesh propagation status.
-- **External Sync**: BLE integration maintains history with external applications like MeshCore Mobile.
-- **Efficiency**: Backlight and redraw management for power reduction.
+Please submit PR's using 'dev' as the base branch!
+For minor changes just submit your PR and I'll try to review it, but for anything more 'impactful' please open an Issue first and start a discussion. Is better to sound out what it is you want to achieve first, and try to come to a consensus on what the best approach is, especially when it impacts the structure or architecture of this codebase.
 
-> [!NOTE]
-> **Development Status**: Certain features like propagation tracking and updated BLE logic are in testing. Please report any issues.
+Here are some general principals you should try to adhere to:
+* Keep it simple. Please, don't think like a high-level lang programmer. Think embedded, and keep code concise, without any unnecessary layers.
+* No dynamic memory allocation, except during setup/begin functions.
+* Use the same brace and indenting style that's in the core source modules. (A .clang-format is prob going to be added soon, but please do NOT retroactively re-format existing code. This just creates unnecessary diffs that make finding problems harder)
 
----
-*Created by Quark1980 & The MeshCore Community*
+## Road-Map / To-Do
+
+There are a number of fairly major features in the pipeline, with no particular time-frames attached yet. In very rough chronological order:
+- [X] Companion radio: UI redesign
+- [X] Repeater + Room Server: add ACL's (like Sensor Node has)
+- [X] Standardise Bridge mode for repeaters
+- [ ] Repeater/Bridge: Standardise the Transport Codes for zoning/filtering
+- [X] Core + Repeater: enhanced zero-hop neighbour discovery
+- [ ] Core: round-trip manual path support
+- [ ] Companion + Apps: support for multiple sub-meshes (and 'off-grid' client repeat mode)
+- [ ] Core + Apps: support for LZW message compression
+- [ ] Core: dynamic CR (Coding Rate) for weak vs strong hops
+- [ ] Core: new framework for hosting multiple virtual nodes on one physical device
+- [ ] V2 protocol spec: discussion and consensus around V2 packet protocol, including path hashes, new encryption specs, etc
+
+## 📞 Get Support
+
+- Report bugs and request features on the [GitHub Issues](https://github.com/ripplebiz/MeshCore/issues) page.
+- Find additional guides and components on [my site](https://buymeacoffee.com/ripplebiz).
+- Join [MeshCore Discord](https://discord.gg/BMwCtwHj5V) to chat with the developers and get help from the community.
