@@ -172,3 +172,45 @@ lv_obj_t *grid_create_back_btn(lv_obj_t *parent, lv_event_cb_t cb) {
   lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
   return btn;
 }
+
+// Unread State
+std::map<std::string, uint16_t> channel_unread;
+std::map<std::string, uint16_t> dm_unread;
+uint16_t total_unread = 0;
+
+lv_obj_t *grid_create_badge(lv_obj_t *parent, uint16_t count) {
+  if (count == 0) return NULL;
+  lv_obj_t *badge = lv_label_create(parent);
+  lv_obj_set_style_bg_color(badge, lv_color_hex(0xFF0000), 0);
+  lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
+  lv_obj_set_style_text_color(badge, lv_color_white(), 0);
+  lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_hor(badge, 6, 0);
+  lv_obj_set_style_pad_ver(badge, 2, 0);
+  lv_obj_set_style_text_font(badge, &lv_font_montserrat_14, 0);
+
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%d", count);
+  lv_label_set_text(badge, buf);
+
+  // Align top-right relative to parent's content
+  lv_obj_align(badge, LV_ALIGN_TOP_RIGHT, 5, -5);
+  return badge;
+}
+
+void update_all_badges() {
+  // Recalculate total
+  total_unread = 0;
+  for (auto const &[tag, count] : channel_unread)
+    total_unread += count;
+  for (auto const &[name, count] : dm_unread)
+    total_unread += count;
+
+  // Update launcher specifically (global external function)
+  extern void launcher_set_chat_badge(int count);
+  launcher_set_chat_badge(total_unread);
+
+  // Update overview if active
+  extern void chat_overview_refresh();
+  chat_overview_refresh();
+}

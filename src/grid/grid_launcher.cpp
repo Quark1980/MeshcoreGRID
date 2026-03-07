@@ -21,10 +21,7 @@ static void global_back_btn_event_cb(lv_event_t *e) {
 static void dummy_app_init(GridApp *app) {
   app->screen = lv_obj_create(NULL);
   lv_obj_add_style(app->screen, &style_grid_main, 0);
-
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%s Screen", app->name);
-  lv_obj_t *lbl = grid_create_label(app->screen, buf, &lv_font_montserrat_28);
+  lv_obj_t *lbl = grid_create_label(app->screen, app->name, &lv_font_montserrat_28);
   lv_obj_center(lbl);
 }
 
@@ -35,13 +32,12 @@ static void dummy_app_unload(GridApp *app) {
   }
 }
 
-// Forward declaration for Chat
-void chat_init(GridApp *app);
-void chat_update(GridApp *app);
-void chat_unload(GridApp *app);
+// Forward declarations for Chat Overview
+void chat_overview_init(GridApp *app);
+void chat_overview_update(GridApp *app);
 
 // Define the 8 Apps
-static GridApp apps[] = { { "Chat", "💬", NULL, chat_init, chat_update, chat_unload },
+static GridApp apps[] = { { "Chat", "💬", NULL, chat_overview_init, chat_overview_update, NULL },
                           { "Contacts", "👥", NULL, dummy_app_init, NULL, dummy_app_unload },
                           { "Radar", "📍", NULL, dummy_app_init, NULL, dummy_app_unload },
                           { "Advertise", "📡", NULL, dummy_app_init, NULL, dummy_app_unload },
@@ -89,6 +85,8 @@ void launcher_set_chat_badge(int count) {
     lv_obj_add_flag(chat_badge, LV_OBJ_FLAG_HIDDEN);
   }
 }
+
+// Badge update is handled globally in grid_ui_common
 
 static void app_btn_event_cb(lv_event_t *e) {
   GridApp *app = (GridApp *)lv_event_get_user_data(e);
@@ -169,6 +167,9 @@ void launcher_init() {
 
   Serial.println("Launcher geladen (2x4 Grid)");
   lv_scr_load(launcher_screen);
+
+  // Auto-load Chat App for testing
+  switch_app(&apps[0]);
 }
 
 void launcher_update() {

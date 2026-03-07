@@ -31,5 +31,15 @@ lv_obj_t *grid_create_label(lv_obj_t *parent, const char *text, const lv_font_t 
 lv_obj_t *grid_create_card(lv_obj_t *parent);
 lv_obj_t *grid_create_textarea(lv_obj_t *parent, const char *placeholder);
 lv_obj_t *grid_create_back_btn(lv_obj_t *parent, lv_event_cb_t cb);
+lv_obj_t *grid_create_badge(lv_obj_t *parent, uint16_t count);
+
+// Global Unread State
+#include <map>
+#include <string>
+extern std::map<std::string, uint16_t> channel_unread;
+extern std::map<std::string, uint16_t> dm_unread;
+extern uint16_t total_unread;
+
+void update_all_badges();
 
 #endif // GRID_UI_COMMON_H

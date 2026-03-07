@@ -1,192 +1,165 @@
 #include "grid_chat.h"
 
+#include "grid_chat_overview.h"
+#include "grid_ui_common.h"
+
 #include <Arduino.h>
+#include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
-static lv_obj_t *chat_cont = NULL;
+
+// --- Shared Data ---
+struct Message {
+  std::string sender;
+  std::string text;
+  std::string time;
+  bool is_me;
+};
+
+static std::map<std::string, std::vector<Message>> chat_history;
+std::vector<std::string> hashtags = { "#mesh", "#general", "#tech" };
+std::vector<std::string> contacts = { "Bob", "Alice", "Charlie" };
+
+static std::string current_conversation = "#mesh";
+static lv_obj_t *msg_list = NULL;
 static lv_obj_t *ta_input = NULL;
-static lv_obj_t *tab_public = NULL;
-static lv_obj_t *tab_dms = NULL;
-static lv_obj_t *active_list = NULL;
-static bool is_public_mode = true;
 
-// Helper to add a message bubble
-void add_message_bubble(lv_obj_t *parent, const char *sender, const char *text, const char *time,
-                        bool is_me) {
-  lv_obj_t *item_cont = lv_obj_create(parent);
-  lv_obj_set_width(item_cont, LV_PCT(100));
-  lv_obj_set_height(item_cont, LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(item_cont, 0, 0);
-  lv_obj_set_style_border_width(item_cont, 0, 0);
-  lv_obj_set_style_pad_all(item_cont, 5, 0);
-  lv_obj_set_flex_flow(item_cont, LV_FLEX_FLOW_COLUMN);
+// --- Helpers ---
+void add_bubble(lv_obj_t *list, const Message &msg) {
+  lv_obj_t *item = lv_obj_create(list);
+  lv_obj_set_width(item, LV_PCT(100));
+  lv_obj_set_height(item, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(item, 0, 0);
+  lv_obj_set_style_border_width(item, 0, 0);
+  lv_obj_set_style_pad_all(item, 5, 0);
+  lv_obj_set_flex_flow(item, LV_FLEX_FLOW_COLUMN);
 
-  // Sender Label
-  lv_obj_t *info_lbl = grid_create_label(item_cont, sender, &lv_font_montserrat_14);
-  lv_obj_set_style_text_color(info_lbl, GRID_COLOR_DIM, 0);
+  lv_obj_t *info = grid_create_label(item, msg.sender.c_str(), &lv_font_montserrat_14);
+  lv_obj_set_style_text_color(info, GRID_COLOR_DIM, 0);
 
-  // Bubble
-  lv_obj_t *bubble = lv_obj_create(item_cont);
+  lv_obj_t *bubble = lv_obj_create(item);
   lv_obj_set_width(bubble, LV_PCT(80));
   lv_obj_set_height(bubble, LV_SIZE_CONTENT);
   lv_obj_set_style_radius(bubble, 12, 0);
-  lv_obj_set_style_pad_all(bubble, 10, 0);
+  lv_obj_set_style_pad_all(bubble, 8, 0);
   lv_obj_set_style_border_width(bubble, 0, 0);
 
-  if (is_me) {
-    lv_obj_set_align(item_cont, LV_ALIGN_TOP_RIGHT);
-    lv_obj_set_style_align(info_lbl, LV_ALIGN_TOP_RIGHT, 0);
+  if (msg.is_me) {
+    lv_obj_set_align(item, LV_ALIGN_TOP_RIGHT);
+    lv_obj_set_style_align(info, LV_ALIGN_TOP_RIGHT, 0);
     lv_obj_set_style_align(bubble, LV_ALIGN_TOP_RIGHT, 0);
     lv_obj_set_style_bg_color(bubble, GRID_COLOR_AMBER, 0);
     lv_obj_set_style_text_color(bubble, GRID_COLOR_BG, 0);
   } else {
-    lv_obj_set_align(item_cont, LV_ALIGN_TOP_LEFT);
-    lv_obj_set_style_align(info_lbl, LV_ALIGN_TOP_LEFT, 0);
+    lv_obj_set_align(item, LV_ALIGN_TOP_LEFT);
+    lv_obj_set_style_align(info, LV_ALIGN_TOP_LEFT, 0);
     lv_obj_set_style_align(bubble, LV_ALIGN_TOP_LEFT, 0);
     lv_obj_set_style_bg_color(bubble, lv_color_hex(0x333333), 0);
     lv_obj_set_style_text_color(bubble, lv_color_hex(0xFFFFFF), 0);
   }
 
-  lv_obj_t *msg_lbl = grid_create_label(bubble, text, &lv_font_montserrat_16);
-  lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(msg_lbl, LV_PCT(100));
+  lv_obj_t *lbl = lv_label_create(bubble);
+  lv_label_set_text(lbl, msg.text.c_str());
+  lv_obj_set_width(lbl, LV_PCT(100));
+  lv_obj_set_style_text_color(lbl, msg.is_me ? GRID_COLOR_BG : lv_color_hex(0xFFFFFF), 0);
 
-  // Time Label (inside or below bubble)
-  lv_obj_t *time_lbl = grid_create_label(bubble, time, &lv_font_montserrat_14);
-  lv_obj_set_style_text_color(time_lbl, is_me ? GRID_COLOR_BG : GRID_COLOR_DIM, 0);
-  lv_obj_set_style_opa(time_lbl, LV_OPA_70, 0);
-  lv_obj_align(time_lbl, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
-  lv_obj_set_style_pad_top(time_lbl, 5, 0);
+  lv_obj_t *time = grid_create_label(bubble, msg.time.c_str(), &lv_font_montserrat_14);
+  lv_obj_set_style_text_color(time, msg.is_me ? GRID_COLOR_BG : GRID_COLOR_DIM, 0);
+  lv_obj_align(time, LV_ALIGN_BOTTOM_RIGHT, 0, 3);
 
-  lv_obj_scroll_to_view(item_cont, LV_ANIM_ON);
+  lv_obj_scroll_to_view(item, LV_ANIM_OFF);
 }
 
-static void send_msg_event_cb(lv_event_t *e) {
+void switch_to_channel(const char *name) {
+  if (!name) return;
+  current_conversation = name;
+
+  // Reset unread count
+  if (name[0] == '#')
+    channel_unread[name] = 0;
+  else
+    dm_unread[name] = 0;
+
+  update_all_badges();
+  switch_app(&chat_app);
+}
+
+static void send_msg_cb(lv_event_t *e) {
   const char *txt = lv_textarea_get_text(ta_input);
-  if (strlen(txt) > 0) {
-    add_message_bubble(active_list, "ME", txt, "21:18", true);
-    lv_textarea_set_text(ta_input, "");
-    // Later: MessageStore.addMessage(...)
-  }
+  if (strlen(txt) == 0) return;
+
+  Message msg = { "ME", txt, "23:50", true };
+  chat_history[current_conversation].push_back(msg);
+  add_bubble(msg_list, msg);
+  lv_textarea_set_text(ta_input, "");
+
+  /* [FUTURE: MESHCORE Integration]
+   * Node node = MeshCore.findNode(current_conversation);
+   * node.send(txt);
+   */
 }
 
-static void tab_event_cb(lv_event_t *e) {
-  lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
-  is_public_mode = (btn == tab_public);
-
-  // Toggle active state colors
-  lv_obj_set_style_bg_color(tab_public, is_public_mode ? GRID_COLOR_AMBER : GRID_COLOR_DIM, 0);
-  lv_obj_set_style_text_color(tab_public, is_public_mode ? GRID_COLOR_BG : GRID_COLOR_AMBER, 0);
-  lv_obj_set_style_bg_color(tab_dms, !is_public_mode ? GRID_COLOR_AMBER : GRID_COLOR_DIM, 0);
-  lv_obj_set_style_text_color(tab_dms, !is_public_mode ? GRID_COLOR_BG : GRID_COLOR_AMBER, 0);
-
-  // Switch lists (In a real app, we'd clear and reload or swap containers)
-  // For this dummy, we'll just add a divider
-  lv_obj_t *sep = lv_label_create(active_list);
-  lv_label_set_text(sep, is_public_mode ? "--- Switched to PUBLIC ---" : "--- Switched to DMs ---");
-  lv_obj_set_style_text_color(sep, GRID_COLOR_DIM, 0);
-  lv_obj_set_width(sep, LV_PCT(100));
-  lv_obj_set_style_text_align(sep, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_scroll_to_view(sep, LV_ANIM_ON);
+static void back_btn_cb(lv_event_t *e) {
+  switch_app(&chat_overview_app);
 }
 
 void chat_init(GridApp *app) {
   app->screen = lv_obj_create(NULL);
   lv_obj_add_style(app->screen, &style_grid_main, 0);
 
-  // Header with Tabs
-  lv_obj_t *header = lv_obj_create(app->screen);
-  lv_obj_set_size(header, LV_HOR_RES, 45);
-  lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 35); // Below statusbar
-  lv_obj_add_style(header, &style_grid_statusbar, 0);
+  // Custom Back Button (since global one only goes to launcher)
+  lv_obj_t *back = grid_create_btn(app->screen, LV_SYMBOL_LEFT);
+  lv_obj_set_size(back, 45, 35);
+  lv_obj_align(back, LV_ALIGN_TOP_LEFT, 5, 35);
+  lv_obj_add_event_cb(back, back_btn_cb, LV_EVENT_CLICKED, NULL);
 
-  // Prevent overlap with global "BACK" button (which is 80px wide + 5px margin)
-  lv_obj_set_style_pad_left(header, 85, 0);
+  lv_obj_t *title = grid_create_label(app->screen, current_conversation.c_str(), &lv_font_montserrat_20);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 40);
+  lv_obj_set_style_text_color(title, GRID_COLOR_AMBER, 0);
 
-  lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_all(header, 5, 0);
+  msg_list = lv_obj_create(app->screen);
+  lv_obj_set_size(msg_list, LV_HOR_RES, LV_VER_RES - 110);
+  lv_obj_align(msg_list, LV_ALIGN_TOP_MID, 0, 75);
+  lv_obj_set_flex_flow(msg_list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_bg_opa(msg_list, 0, 0);
+  lv_obj_set_style_border_width(msg_list, 0, 0);
+  lv_obj_set_scrollbar_mode(msg_list, LV_SCROLLBAR_MODE_AUTO);
 
-  tab_public = grid_create_btn(header, "PUBLIC");
-  lv_obj_set_size(tab_public, 70, 32);
-  lv_obj_add_event_cb(tab_public, tab_event_cb, LV_EVENT_CLICKED, NULL);
+  // Load History
+  for (auto &m : chat_history[current_conversation])
+    add_bubble(msg_list, m);
 
-  tab_dms = grid_create_btn(header, "DMs");
-  lv_obj_set_size(tab_dms, 70, 32);
-  lv_obj_add_event_cb(tab_dms, tab_event_cb, LV_EVENT_CLICKED, NULL);
-
-  // Set initial active tab
-  lv_obj_set_style_bg_color(tab_public, GRID_COLOR_AMBER, 0);
-  lv_obj_set_style_text_color(tab_public, GRID_COLOR_BG, 0);
-
-  // Main Chat Area (Scrollable container)
-  active_list = lv_obj_create(app->screen);
-  lv_obj_set_size(active_list, LV_HOR_RES, 260); // Adjust for input
-  lv_obj_align(active_list, LV_ALIGN_TOP_MID, 0, 80);
-  lv_obj_set_style_bg_opa(active_list, 0, 0);
-  lv_obj_set_style_border_width(active_list, 0, 0);
-  lv_obj_set_flex_flow(active_list, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(active_list, 10, 0);
-  lv_obj_set_style_pad_gap(active_list, 10, 0);
-  lv_obj_set_scrollbar_mode(active_list, LV_SCROLLBAR_MODE_AUTO);
-
-  // Bottom Input Area
+  // Input Footer
   lv_obj_t *footer = lv_obj_create(app->screen);
   lv_obj_set_size(footer, LV_HOR_RES, 70);
   lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_obj_set_style_bg_color(footer, lv_color_hex(0x000000), 0);
-  lv_obj_set_style_border_side(footer, LV_BORDER_SIDE_TOP, 0);
-  lv_obj_set_style_border_color(footer, GRID_COLOR_DIM, 0);
-  lv_obj_set_style_border_width(footer, 1, 0);
-  lv_obj_set_style_pad_all(footer, 5, 0);
 
-  ta_input = grid_create_textarea(footer, "Write message...");
+  ta_input = grid_create_textarea(footer, "Message...");
   lv_obj_set_size(ta_input, 160, 45);
-  lv_obj_align(ta_input, LV_ALIGN_LEFT_MID, 5, 0);
+  lv_obj_align(ta_input, LV_ALIGN_LEFT_MID, 10, 0);
 
-  lv_obj_t *btn_send = grid_create_btn(footer, LV_SYMBOL_PLAY); // Send icon
-  lv_obj_set_size(btn_send, 60, 45);
-  lv_obj_align(btn_send, LV_ALIGN_RIGHT_MID, -5, 0);
-  lv_obj_add_event_cb(btn_send, send_msg_event_cb, LV_EVENT_CLICKED, NULL);
-
-  // Initial dummy messages
-  add_message_bubble(active_list, "MeshNode_7A", "Hello world! This is GRID Chat.", "21:00", false);
+  lv_obj_t *send = grid_create_btn(footer, LV_SYMBOL_PLAY);
+  lv_obj_set_size(send, 60, 45);
+  lv_obj_align(send, LV_ALIGN_RIGHT_MID, -10, 0);
+  lv_obj_add_event_cb(send, send_msg_cb, LV_EVENT_CLICKED, NULL);
 }
 
 void chat_update(GridApp *app) {
-  // Only simulate if this screen is active
   if (lv_screen_active() != app->screen) {
-    // Background logic: increment notification badge occasionally
-    static uint32_t last_notif = 0;
-    if (millis() - last_notif > 15000) {
-      last_notif = millis();
-      static int count = 0;
-      launcher_set_chat_badge(++count);
+    // Simulation of incoming messages in background
+    static uint32_t last = 0;
+    if (millis() - last > 20000) {
+      last = millis();
+      channel_unread["#mesh"]++;
+      dm_unread["Bob"]++;
+      update_all_badges();
+      Serial.println("GRID: Simulated unread messages received.");
     }
     return;
   }
-
-  static uint32_t last_msg = 0;
-  if (millis() - last_msg > 7000) {
-    last_msg = millis();
-    if (is_public_mode) {
-      add_message_bubble(active_list, "Radio_Bob", "Does anyone hear me on Public?", "21:19", false);
-    } else {
-      add_message_bubble(active_list, "Alice", "Hey, are you coming to the meet?", "21:20", false);
-    }
-    // Reset badge when in app
-    launcher_set_chat_badge(0);
-  }
 }
 
-void chat_unload(GridApp *app) {
-  // Cleanup if needed
-}
-
-GridApp chat_app = { .name = "Chat",
-                     // We'll leave icon blank or use a string if the struct allows, but typically it's name +
-                     // screen .icon = "💬",
-                     .init = chat_init,
-                     .update = chat_update,
-                     .unload = chat_unload };
+GridApp chat_app = { "Conversation", "💬", NULL, chat_init, chat_update, NULL };

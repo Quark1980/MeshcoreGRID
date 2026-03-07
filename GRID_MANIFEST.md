@@ -22,25 +22,18 @@ Essential settings and information for the MeshCore-Touch project.
     - **Global Back Button**: Persistent `lv_button` on `lv_layer_top()` for universal navigation.
     - **Status Bar**: Persistent `lv_obj` on `lv_layer_top()` for system metrics.
 - **Applications**:
-    - `src/grid/grid_chat`: **Professional Chat App** featuring:
-        - Message Bubbles (Left/Right alignment).
-        - Sender Metadata (Name + Type).
-        - PUBLIC vs DMs Tab Selector.
-        - Auto-scroll and Unread Notification Badges.
-    - `src/grid/grid_ui_common`: Centralized styles and **Float-Protected Keyboard** (prevents circular event crashes).
-    - `src/grid/grid_launcher`: Multi-app grid and lifecycle management (`switch_app`).
-
-## Key Configurations (`lv_conf.h`)
-- `LV_FONT_MONTSERRAT_14`, `16`, `20`, `28` enabled.
-- `LV_USE_OS LV_OS_FREERTOS` enabled.
-- PSRAM buffer allocation handled in `main.cpp`.
-- Helium/ARM ASM disabled (incompatible with Xtensa).
-
+    - `src/grid/grid_chat_overview`: **Chat Home** with TabView (HASHTAGS | DMs) and real-time numeric badges.
+    - `src/grid/grid_chat`: **Active Conversation View** with bubble messages, sender metadata, and hashtag linking.
+    - `src/grid/grid_ui_common`: Centralized styles, **Float-Protected Keyboard**, and Unread Badge helper (`grid_create_badge`).
+    - `src/grid/grid_launcher`: Multi-app grid with total unread badges on app icons.
+---
 ## Progress Log (Current)
 - [x] Boot stable with TFT_eSPI & FT6336U.
 - [x] Fixed circular sync crash in keyboard preview.
 - [x] Implemented global nav logic on top layer.
-- [x] Implemented professional bubble chat with tab selection.
+- [x] Implemented professional bubble chat with unread badges.
+- [x] Implemented Hashtag Channels and Direct Messages (DM) flow.
+- [x] Refactored Chat into Overview/Conversation architecture.
 
 ## Git Backup
 - Remote: `https://github.com/Quark1980/MeshcoreGRID.git`

@@ -3,12 +3,14 @@
 
 #include "grid_launcher.h"
 
-// Chat App Instance
-extern GridApp chat_app;
+#include <string>
+#include <vector>
 
-// Functions
-void chat_init(GridApp *app);
-void chat_update(GridApp *app);
-void chat_unload(GridApp *app);
+
+extern GridApp chat_app;
+extern std::vector<std::string> hashtags;
+extern std::vector<std::string> contacts;
+
+void switch_to_channel(const char *name);
 
 #endif // GRID_CHAT_H
