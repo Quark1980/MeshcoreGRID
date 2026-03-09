@@ -81,6 +81,13 @@ They can also be managed via LoRa in the mobile app by using the Remote Manageme
 
 MeshCore is designed for devices listed in the [MeshCore Flasher](https://flasher.meshcore.co.uk)
 
+## Heltec V4 TFT Touch Status
+
+- Heltec V4 TFT has confirmed touch hardware support using FT6336 (`0x38`) on pins SDA=5, SCL=6, INT=7, RST=41.
+- The companion firmware target `heltec_v4_tft_companion_radio_ble` is confirmed buildable and flashable.
+- Touch groundwork is now integrated in the TFT display path (`ST7789LCDDisplay`) for the next UI phase.
+- Next phase name: the touch GUI project is **GRID** for **MeshcoreGRID**.
+
 ## 📜 License
 
 MeshCore is open-source software released under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
