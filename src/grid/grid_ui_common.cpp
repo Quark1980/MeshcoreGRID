@@ -1,5 +1,9 @@
 #include "grid_ui_common.h"
 
+#include <string>
+#include <vector>
+
+
 lv_style_t style_grid_main;
 lv_style_t style_grid_btn;
 lv_style_t style_grid_label_small;
@@ -7,6 +11,8 @@ lv_style_t style_grid_label_mid;
 lv_style_t style_grid_label_large;
 lv_style_t style_grid_statusbar;
 lv_style_t style_grid_card;
+lv_style_t style_grid_msg_repeat;
+lv_style_t style_grid_msg_hop;
 
 lv_obj_t *grid_kb = NULL;
 lv_obj_t *kb_preview_ta = NULL;
@@ -21,6 +27,17 @@ static void kb_preview_ta_event_cb(lv_event_t *e) {
       is_syncing = true;
       lv_textarea_set_text(ta, lv_textarea_get_text(kb_preview_ta));
       is_syncing = false;
+    }
+  }
+}
+
+static void kb_event_cb(lv_event_t *e) {
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *kb = (lv_obj_t *)lv_event_get_target(e);
+  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+    lv_obj_t *ta = lv_keyboard_get_textarea(kb);
+    if (ta) {
+      lv_obj_send_event(ta, code, NULL);
     }
   }
 }
@@ -72,9 +89,10 @@ void grid_ui_init() {
   lv_style_init(&style_grid_btn);
   lv_style_set_bg_color(&style_grid_btn, GRID_COLOR_DIM);
   lv_style_set_border_color(&style_grid_btn, GRID_COLOR_AMBER);
-  lv_style_set_border_width(&style_grid_btn, 2);
-  lv_style_set_radius(&style_grid_btn, 8);
+  lv_style_set_border_width(&style_grid_btn, 1);
+  lv_style_set_radius(&style_grid_btn, 6);
   lv_style_set_text_color(&style_grid_btn, GRID_COLOR_AMBER);
+  lv_style_set_pad_all(&style_grid_btn, 4);
 
   // Card Style
   lv_style_init(&style_grid_card);
@@ -98,10 +116,19 @@ void grid_ui_init() {
   lv_style_set_text_font(&style_grid_label_small, &lv_font_montserrat_14);
 
   lv_style_init(&style_grid_label_mid);
-  lv_style_set_text_font(&style_grid_label_mid, &lv_font_montserrat_20);
+  lv_style_set_text_font(&style_grid_label_mid, &lv_font_montserrat_16);
 
   lv_style_init(&style_grid_label_large);
-  lv_style_set_text_font(&style_grid_label_large, &lv_font_montserrat_28);
+  lv_style_set_text_font(&style_grid_label_large, &lv_font_montserrat_20);
+
+  // New Bubble Styles
+  lv_style_init(&style_grid_msg_repeat);
+  lv_style_set_text_font(&style_grid_msg_repeat, &lv_font_montserrat_14);
+  lv_style_set_text_color(&style_grid_msg_repeat, GRID_COLOR_AMBER);
+
+  lv_style_init(&style_grid_msg_hop);
+  lv_style_set_text_font(&style_grid_msg_hop, &lv_font_montserrat_14);
+  lv_style_set_text_color(&style_grid_msg_hop, lv_color_hex(0xAAAAAA));
 
   // Central Keyboard on Top Layer
   grid_kb = lv_keyboard_create(lv_layer_top());
@@ -110,6 +137,7 @@ void grid_ui_init() {
   lv_obj_set_style_text_color(grid_kb, GRID_COLOR_AMBER, 0);
   lv_obj_set_size(grid_kb, LV_HOR_RES, 200); // Fixed height for predictability
   lv_obj_align(grid_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_add_event_cb(grid_kb, kb_event_cb, LV_EVENT_ALL, NULL);
 
   // Floating Keyboard Preview field (also on Top Layer to avoid clipping)
   kb_preview_ta = lv_textarea_create(lv_layer_top());
@@ -173,6 +201,9 @@ lv_obj_t *grid_create_back_btn(lv_obj_t *parent, lv_event_cb_t cb) {
   return btn;
 }
 
+std::vector<std::string> hashtags = { "#mesh", "#grid", "#hashtag" };
+std::vector<std::string> contacts = { "Bob", "Alice", "Charlie", "Dave" };
+
 // Unread State
 std::map<std::string, uint16_t> channel_unread;
 std::map<std::string, uint16_t> dm_unread;
@@ -196,6 +227,27 @@ lv_obj_t *grid_create_badge(lv_obj_t *parent, uint16_t count) {
   // Align top-right relative to parent's content
   lv_obj_align(badge, LV_ALIGN_TOP_RIGHT, 5, -5);
   return badge;
+}
+
+lv_obj_t *grid_create_popup(const char *title, const char *msg, const char *btn1, lv_event_cb_t cb1,
+                            const char *btn2, lv_event_cb_t cb2) {
+  lv_obj_t *mbox = lv_msgbox_create(lv_layer_top());
+  lv_msgbox_add_title(mbox, title);
+  lv_msgbox_add_text(mbox, msg);
+
+  if (btn1) {
+    lv_obj_t *b1 = lv_msgbox_add_footer_button(mbox, btn1);
+    if (cb1) lv_obj_add_event_cb(b1, cb1, LV_EVENT_CLICKED, mbox);
+  }
+  if (btn2) {
+    lv_obj_t *b2 = lv_msgbox_add_footer_button(mbox, btn2);
+    if (cb2) lv_obj_add_event_cb(b2, cb2, LV_EVENT_CLICKED, mbox);
+  }
+
+  lv_obj_add_style(mbox, &style_grid_card, 0);
+  lv_obj_set_style_text_color(mbox, GRID_COLOR_AMBER, 0);
+  lv_obj_center(mbox);
+  return mbox;
 }
 
 void update_all_badges() {

@@ -17,6 +17,8 @@ extern lv_style_t style_grid_label_mid;
 extern lv_style_t style_grid_label_large;
 extern lv_style_t style_grid_statusbar;
 extern lv_style_t style_grid_card;
+extern lv_style_t style_grid_msg_repeat;
+extern lv_style_t style_grid_msg_hop;
 
 // Globaal Keyboard
 extern lv_obj_t *grid_kb;
@@ -32,6 +34,8 @@ lv_obj_t *grid_create_card(lv_obj_t *parent);
 lv_obj_t *grid_create_textarea(lv_obj_t *parent, const char *placeholder);
 lv_obj_t *grid_create_back_btn(lv_obj_t *parent, lv_event_cb_t cb);
 lv_obj_t *grid_create_badge(lv_obj_t *parent, uint16_t count);
+lv_obj_t *grid_create_popup(const char *title, const char *msg, const char *btn1, lv_event_cb_t cb1,
+                            const char *btn2, lv_event_cb_t cb2);
 
 // Global Unread State
 #include <map>

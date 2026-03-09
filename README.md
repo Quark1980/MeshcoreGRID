@@ -99,6 +99,7 @@ Here are some general principals you should try to adhere to:
 
 There are a number of fairly major features in the pipeline, with no particular time-frames attached yet. In very rough chronological order:
 - [X] Companion radio: UI redesign
+- [X] GRID UI (Meshcore-Touch): Advanced launcher, chat flow, and DMs
 - [X] Repeater + Room Server: add ACL's (like Sensor Node has)
 - [X] Standardise Bridge mode for repeaters
 - [ ] Repeater/Bridge: Standardise the Transport Codes for zoning/filtering

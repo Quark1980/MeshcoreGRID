@@ -34,6 +34,10 @@ Essential settings and information for the MeshCore-Touch project.
 - [x] Implemented professional bubble chat with unread badges.
 - [x] Implemented Hashtag Channels and Direct Messages (DM) flow.
 - [x] Refactored Chat into Overview/Conversation architecture.
+- [x] Implemented "Launcher-First" boot flow (Always starts at Home).
+- [x] Integrated keyboard "Ready" (checkmark) for direct message sending.
+- [x] Added long-press menu for contacts and "+" button for hashtags.
+- [x] Optimized GUI layout and padding for Heltec V4.
 
 ## Git Backup
 - Remote: `https://github.com/Quark1980/MeshcoreGRID.git`

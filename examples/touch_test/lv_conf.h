@@ -58,6 +58,19 @@
 #define LV_FONT_MONTSERRAT_28    1
 #define LV_FONT_DEFAULT          &lv_font_montserrat_14
 
+/*-------------
+ * Widgets
+ *-----------*/
+#define LV_USE_BUTTON            1
+#define LV_USE_LABEL             1
+#define LV_USE_LIST              1
+#define LV_USE_TABVIEW           1
+#define LV_USE_MSGBOX            1
+#define LV_USE_KEYBOARD          1
+#define LV_USE_TEXTAREA          1
+#define LV_USE_DROPDOWN          1
+#define LV_USE_FLEX              1
+
 /*=====================
  *  COMPILER SETTINGS
  *====================*/

@@ -11,6 +11,7 @@ extern GridApp chat_app;
 extern std::vector<std::string> hashtags;
 extern std::vector<std::string> contacts;
 
+// Unified switch function
 void switch_to_channel(const char *name);
 
 #endif // GRID_CHAT_H

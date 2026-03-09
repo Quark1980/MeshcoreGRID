@@ -151,15 +151,15 @@ void launcher_init() {
     lv_obj_add_event_cb(btn, app_btn_event_cb, LV_EVENT_CLICKED, &apps[i]);
   }
 
-  // Create global back button
+  // Create global back button (Home/Launcher)
   global_back_btn = lv_button_create(lv_layer_top());
-  lv_obj_set_size(global_back_btn, 80, 30);
-  lv_obj_align(global_back_btn, LV_ALIGN_TOP_LEFT, 5, 35); // Below statusbar
+  lv_obj_set_size(global_back_btn, 45, 30);
+  lv_obj_align(global_back_btn, LV_ALIGN_TOP_RIGHT, -5, 35); // Top right, below statusbar
   lv_obj_add_style(global_back_btn, &style_grid_btn, 0);
   lv_obj_set_style_bg_opa(global_back_btn, LV_OPA_50, 0);
 
   lv_obj_t *back_label = lv_label_create(global_back_btn);
-  lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back");
+  lv_label_set_text(back_label, LV_SYMBOL_HOME);
   lv_obj_set_style_text_font(back_label, &lv_font_montserrat_14, 0);
   lv_obj_center(back_label);
   lv_obj_add_event_cb(global_back_btn, global_back_btn_event_cb, LV_EVENT_CLICKED, NULL);
@@ -168,8 +168,8 @@ void launcher_init() {
   Serial.println("Launcher geladen (2x4 Grid)");
   lv_scr_load(launcher_screen);
 
-  // Auto-load Chat App for testing
-  switch_app(&apps[0]);
+  Serial.println("Launcher geladen (2x4 Grid)");
+  lv_scr_load(launcher_screen);
 }
 
 void launcher_update() {
