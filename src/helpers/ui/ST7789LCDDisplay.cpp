@@ -1,22 +1,56 @@
 #include "ST7789LCDDisplay.h"
 
 #ifndef DISPLAY_ROTATION
-  #define DISPLAY_ROTATION 3
+  #if defined(HELTEC_LORA_V4_TFT)
+    #define DISPLAY_ROTATION 0
+  #else
+    #define DISPLAY_ROTATION 3
+  #endif
 #endif
 
 #ifndef DISPLAY_SCALE_X
-  #define DISPLAY_SCALE_X 2.5f // 320 / 128
+  #if defined(HELTEC_LORA_V4_TFT)
+    #define DISPLAY_SCALE_X 3.75f // 480 / 128
+  #else
+    #define DISPLAY_SCALE_X 2.5f // 320 / 128
+  #endif
 #endif
 
 #ifndef DISPLAY_SCALE_Y
-  #define DISPLAY_SCALE_Y 3.75f // 240 / 64
+  #if defined(HELTEC_LORA_V4_TFT)
+    #define DISPLAY_SCALE_Y 5.0f // 320 / 64
+  #else
+    #define DISPLAY_SCALE_Y 3.75f // 240 / 64
+  #endif
 #endif
 
-#define DISPLAY_WIDTH 240
-#define DISPLAY_HEIGHT 320
+#if defined(HELTEC_LORA_V4_TFT)
+  #define DISPLAY_WIDTH 320
+  #define DISPLAY_HEIGHT 480
+
+  #ifndef PIN_TOUCH_SDA
+    #define PIN_TOUCH_SDA 5
+  #endif
+  #ifndef PIN_TOUCH_SCL
+    #define PIN_TOUCH_SCL 6
+  #endif
+  #ifndef PIN_TOUCH_INT
+    #define PIN_TOUCH_INT 7
+  #endif
+  #ifndef PIN_TOUCH_RST
+    #define PIN_TOUCH_RST 41
+  #endif
+  #ifndef TOUCH_I2C_ADDR
+    #define TOUCH_I2C_ADDR 0x38
+  #endif
+#else
+  #define DISPLAY_WIDTH 240
+  #define DISPLAY_HEIGHT 320
+#endif
 
 bool ST7789LCDDisplay::i2c_probe(TwoWire& wire, uint8_t addr) {
-  return true;
+  wire.beginTransmission(addr);
+  return wire.endTransmission() == 0;
 }
 
 bool ST7789LCDDisplay::begin() {
@@ -39,7 +73,25 @@ bool ST7789LCDDisplay::begin() {
       displaySPI.begin(PIN_TFT_SCL, -1, PIN_TFT_SDA, PIN_TFT_CS);
     #endif
 
-    display.init(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    #if defined(HELTEC_LORA_V4_TFT)
+      display.init(DISPLAY_WIDTH, DISPLAY_HEIGHT, 0, 0, ST7796S_BGR);
+
+      // Keep touch on a dedicated I2C bus so board/sensor I2C stays untouched.
+      #if defined(ESP32)
+        pinMode(PIN_TOUCH_RST, OUTPUT);
+        digitalWrite(PIN_TOUCH_RST, LOW);
+        delay(10);
+        digitalWrite(PIN_TOUCH_RST, HIGH);
+        delay(50);
+
+        pinMode(PIN_TOUCH_INT, INPUT);
+        _touchWire.begin(PIN_TOUCH_SDA, PIN_TOUCH_SCL);
+        _touchWire.setClock(400000);
+        _touchReady = i2c_probe(_touchWire, TOUCH_I2C_ADDR);
+      #endif
+    #else
+      display.init(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    #endif
     display.setRotation(DISPLAY_ROTATION);
 
     display.setSPISpeed(40e6);
@@ -53,6 +105,45 @@ bool ST7789LCDDisplay::begin() {
   }
 
   return true;
+}
+
+bool ST7789LCDDisplay::getTouch(int* x, int* y) {
+#if defined(HELTEC_LORA_V4_TFT) && defined(ESP32)
+  if (!_touchReady || !x || !y) {
+    return false;
+  }
+
+  _touchWire.beginTransmission(TOUCH_I2C_ADDR);
+  _touchWire.write(0x02);  // FT6336 TD_STATUS register
+  if (_touchWire.endTransmission() != 0) {
+    return false;
+  }
+
+  _touchWire.requestFrom((uint16_t)TOUCH_I2C_ADDR, (uint8_t)5, true);
+  if (_touchWire.available() < 5) {
+    return false;
+  }
+
+  uint8_t touches = _touchWire.read() & 0x0F;
+  uint8_t x_high = _touchWire.read();
+  uint8_t x_low = _touchWire.read();
+  uint8_t y_high = _touchWire.read();
+  uint8_t y_low = _touchWire.read();
+
+  if (touches == 0) {
+    return false;
+  }
+
+  int16_t raw_x = ((x_high & 0x0F) << 8) | x_low;
+  int16_t raw_y = ((y_high & 0x0F) << 8) | y_low;
+  *x = constrain(raw_x, 0, DISPLAY_WIDTH - 1);
+  *y = constrain(raw_y, 0, DISPLAY_HEIGHT - 1);
+  return true;
+#else
+  (void)x;
+  (void)y;
+  return false;
+#endif
 }
 
 void ST7789LCDDisplay::turnOn() {
