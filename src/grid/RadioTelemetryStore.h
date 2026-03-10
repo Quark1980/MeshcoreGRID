@@ -25,5 +25,14 @@ uint32_t packetCount();
 uint32_t lastRawPacketTimestamp();
 void snapshotRawPackets(std::vector<RawPacketEntry>& out, size_t maxCount);
 
+// Counts how many times logRxRaw entered the GRID path (incremented before recordRawPacket).
+// If this stays 0, the radio is not receiving any packets from other nodes.
+void     bumpRxCallHits();
+uint32_t getRxCallHits();
+
+// Counts raw frames seen directly in Dispatcher::checkRecv() before MyMesh hooks.
+void     bumpDispatcherRxRawHits();
+uint32_t getDispatcherRxRawHits();
+
 }  // namespace radio_telemetry
 }  // namespace grid

@@ -4,6 +4,10 @@
   #include <Arduino.h>
 #endif
 
+#if GRID_OS_BOOT
+  #include "grid/RadioTelemetryStore.h"
+#endif
+
 #include <math.h>
 
 namespace mesh {
@@ -158,6 +162,9 @@ void Dispatcher::checkRecv() {
     uint8_t raw[MAX_TRANS_UNIT+1];
     int len = _radio->recvRaw(raw, MAX_TRANS_UNIT);
     if (len > 0) {
+    #if GRID_OS_BOOT
+      grid::radio_telemetry::bumpDispatcherRxRawHits();
+    #endif
       logRxRaw(_radio->getLastSNR(), _radio->getLastRSSI(), raw, len);
 
       pkt = _mgr->allocNew();

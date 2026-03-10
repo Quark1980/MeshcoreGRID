@@ -300,6 +300,7 @@ void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
   }
 
 #if GRID_OS_BOOT
+  grid::radio_telemetry::bumpRxCallHits();
   grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
                                          static_cast<int16_t>(rssi),
                                          static_cast<int8_t>(snr),
@@ -534,6 +535,13 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
                            const char *text) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
 #if GRID_OS_BOOT
+  if (pkt && pkt->payload_len > 0) {
+    grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
+                                           static_cast<int16_t>(_radio->getLastRSSI()),
+                                           static_cast<int8_t>(_radio->getLastSNR()),
+                                           pkt->payload,
+                                           pkt->payload_len);
+  }
   char senderName[24];
   if (from.name[0]) {
     StrHelper::strzcpy(senderName, from.name, sizeof(senderName));
@@ -570,6 +578,13 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
                                   const char *text) {
   uint8_t channel_idx = findChannelIdx(channel);
 #if GRID_OS_BOOT
+  if (pkt && pkt->payload_len > 0) {
+    grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
+                                           static_cast<int16_t>(_radio->getLastRSSI()),
+                                           static_cast<int8_t>(_radio->getLastSNR()),
+                                           pkt->payload,
+                                           pkt->payload_len);
+  }
   MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT,
                                       text,
                                       "#channel",
@@ -773,6 +788,15 @@ bool MyMesh::onContactPathRecv(ContactInfo& contact, uint8_t* in_path, uint8_t i
 }
 
 void MyMesh::onControlDataRecv(mesh::Packet *packet) {
+#if GRID_OS_BOOT
+  if (packet && packet->payload_len > 0) {
+    grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
+                                           static_cast<int16_t>(_radio->getLastRSSI()),
+                                           static_cast<int8_t>(_radio->getLastSNR()),
+                                           packet->payload,
+                                           packet->payload_len);
+  }
+#endif
   if (packet->payload_len + 4 > sizeof(out_frame)) {
     MESH_DEBUG_PRINTLN("onControlDataRecv(), payload_len too long: %d", packet->payload_len);
     return;
@@ -793,6 +817,15 @@ void MyMesh::onControlDataRecv(mesh::Packet *packet) {
 }
 
 void MyMesh::onRawDataRecv(mesh::Packet *packet) {
+#if GRID_OS_BOOT
+  if (packet && packet->payload_len > 0) {
+    grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
+                                           static_cast<int16_t>(_radio->getLastRSSI()),
+                                           static_cast<int8_t>(_radio->getLastSNR()),
+                                           packet->payload,
+                                           packet->payload_len);
+  }
+#endif
   if (packet->payload_len + 4 > sizeof(out_frame)) {
     MESH_DEBUG_PRINTLN("onRawDataRecv(), payload_len too long: %d", packet->payload_len);
     return;
@@ -2095,7 +2128,9 @@ void MyMesh::loop() {
   if (_cli_rescue) {
     checkCLIRescueCmd();
   } else {
-    checkSerialInterface();
+    if (_serial && _serial->isEnabled()) {
+      checkSerialInterface();
+    }
   }
 
   // is there are pending dirty contacts write needed?
@@ -2105,7 +2140,7 @@ void MyMesh::loop() {
   }
 
 #ifdef DISPLAY_CLASS
-  if (_ui) _ui->setHasConnection(_serial->isConnected());
+  if (_ui) _ui->setHasConnection(_serial && _serial->isConnected());
 #endif
 }
 

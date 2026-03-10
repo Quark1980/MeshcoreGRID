@@ -22,6 +22,8 @@ uint32_t gLastTimestamp = 0;
 uint32_t gPacketSeq = 0;
 uint32_t gPacketCount = 0;
 uint32_t gLastRawTimestamp = 0;
+uint32_t gRxCallHits = 0;
+uint32_t gDispatcherRxRawHits = 0;
 
 RawPacketEntry gRawPackets[kMaxRawPackets];
 size_t gRawHead = 0;
@@ -44,6 +46,7 @@ void updateMetrics(int16_t rssi, int8_t snr, uint32_t timestamp) {
 bool getLatestMetrics(int16_t& rssi, int8_t& snr, uint32_t& timestamp) {
   bool has = false;
   portENTER_CRITICAL(&gStoreMux);
+
   has = gHasMetrics;
   if (has) {
     rssi = gLastRssi;
@@ -132,5 +135,35 @@ void snapshotRawPackets(std::vector<RawPacketEntry>& out, size_t maxCount) {
   portEXIT_CRITICAL(&gStoreMux);
 }
 
+void bumpRxCallHits() {
+  portENTER_CRITICAL(&gStoreMux);
+  gRxCallHits++;
+  portEXIT_CRITICAL(&gStoreMux);
+}
+
+uint32_t getRxCallHits() {
+  uint32_t n = 0;
+  portENTER_CRITICAL(&gStoreMux);
+  n = gRxCallHits;
+  portEXIT_CRITICAL(&gStoreMux);
+  return n;
+}
+
+void bumpDispatcherRxRawHits() {
+  portENTER_CRITICAL(&gStoreMux);
+  gDispatcherRxRawHits++;
+  portEXIT_CRITICAL(&gStoreMux);
+}
+
+uint32_t getDispatcherRxRawHits() {
+  uint32_t n = 0;
+  portENTER_CRITICAL(&gStoreMux);
+  n = gDispatcherRxRawHits;
+  portEXIT_CRITICAL(&gStoreMux);
+  return n;
+}
+
 }  // namespace radio_telemetry
 }  // namespace grid
+
+

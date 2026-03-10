@@ -72,6 +72,7 @@ private:
   lv_obj_t* _statusBar;
   lv_obj_t* _statusSignalLabel;
   lv_obj_t* _statusSignalBars[4];
+  lv_obj_t* _statusBleLabel;
   lv_obj_t* _navBar;
   lv_obj_t* _contentRoot;
   lv_obj_t* _activeScreen;

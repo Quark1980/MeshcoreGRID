@@ -1,5 +1,6 @@
 #include "GridApps.h"
 
+#include "MyMesh.h"
 #include "Packet.h"
 #include "RadioTelemetryStore.h"
 #include "WindowManager.h"
@@ -76,10 +77,12 @@ class RadioApp : public MeshApp {
 public:
   RadioApp()
       : _tabview(nullptr),
+        _settingsText(nullptr),
         _rssi(nullptr),
         _snr(nullptr),
         _updated(nullptr),
         _rawDiag(nullptr),
+        _rxStats(nullptr),
         _rawList(nullptr),
         _lastRefreshMs(0),
         _lastPacketSeq(0) {}
@@ -95,6 +98,7 @@ public:
     lv_obj_align(_tabview, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     lv_obj_t* metricsTab = lv_tabview_add_tab(_tabview, "Metrics");
+    lv_obj_t* settingsTab = lv_tabview_add_tab(_tabview, "Settings");
     lv_obj_t* rawTab = lv_tabview_add_tab(_tabview, "Raw RX");
 
     lv_obj_t* card = lv_obj_create(metricsTab);
@@ -104,29 +108,42 @@ public:
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
 
-    char buf[64];
-    snprintf(buf, sizeof(buf), "LoRa %.3f MHz", (double)LORA_FREQ);
-    lv_obj_t* freq = lv_label_create(card);
-    lv_label_set_text(freq, buf);
-    lv_obj_align(freq, LV_ALIGN_TOP_LEFT, 12, 12);
+    lv_obj_t* settingsHint = lv_label_create(card);
+    lv_label_set_text(settingsHint, "Open Settings tab for active radio profile");
+    lv_obj_set_style_text_color(settingsHint, lv_color_hex(0x9FAABB), 0);
+    lv_obj_align(settingsHint, LV_ALIGN_TOP_LEFT, 12, 12);
 
-    snprintf(buf, sizeof(buf), "BW %.1f  SF %d", (double)LORA_BW, (int)LORA_SF);
-    lv_obj_t* mod = lv_label_create(card);
-    lv_label_set_text(mod, buf);
-    lv_obj_align(mod, LV_ALIGN_TOP_LEFT, 12, 36);
+    lv_obj_t* settingsCard = lv_obj_create(settingsTab);
+    lv_obj_set_size(settingsCard, LV_PCT(98), LV_PCT(96));
+    lv_obj_align(settingsCard, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_radius(settingsCard, 12, 0);
+    lv_obj_set_style_bg_color(settingsCard, lv_color_hex(0x1A1F27), 0);
+    lv_obj_set_style_border_color(settingsCard, lv_color_hex(0x2F3947), 0);
+
+    lv_obj_t* title2 = lv_label_create(settingsCard);
+    lv_label_set_text(title2, "Current Settings");
+    lv_obj_set_style_text_color(title2, lv_color_hex(0xE2E8F0), 0);
+    lv_obj_set_style_text_font(title2, &lv_font_montserrat_16, 0);
+    lv_obj_align(title2, LV_ALIGN_TOP_LEFT, 12, 10);
+
+    _settingsText = lv_label_create(settingsCard);
+    lv_obj_set_style_text_color(_settingsText, lv_color_hex(0xD6E0EC), 0);
+    lv_obj_set_style_text_font(_settingsText, &lv_font_montserrat_14, 0);
+    lv_obj_align(_settingsText, LV_ALIGN_TOP_LEFT, 12, 38);
+    lv_label_set_text(_settingsText, "Loading...\n");
 
     _rssi = lv_label_create(card);
     lv_label_set_text(_rssi, "RSSI: waiting");
-    lv_obj_align(_rssi, LV_ALIGN_TOP_LEFT, 12, 68);
+    lv_obj_align(_rssi, LV_ALIGN_TOP_LEFT, 12, 104);
 
     _snr = lv_label_create(card);
     lv_label_set_text(_snr, "SNR: waiting");
-    lv_obj_align(_snr, LV_ALIGN_TOP_LEFT, 12, 92);
+    lv_obj_align(_snr, LV_ALIGN_TOP_LEFT, 12, 126);
 
     _updated = lv_label_create(card);
     lv_label_set_text(_updated, "Updated: --");
     lv_obj_set_style_text_color(_updated, lv_color_hex(0x9FAABB), 0);
-    lv_obj_align(_updated, LV_ALIGN_TOP_LEFT, 12, 116);
+    lv_obj_align(_updated, LV_ALIGN_TOP_LEFT, 12, 148);
 
     _rawList = lv_list_create(rawTab);
     lv_obj_set_size(_rawList, LV_PCT(100), LV_PCT(100));
@@ -137,7 +154,17 @@ public:
     lv_obj_align(_rawDiag, LV_ALIGN_TOP_LEFT, 8, 4);
     lv_label_set_text(_rawDiag, "raw packets: 0  last: --");
 
-    lv_obj_set_style_pad_top(_rawList, 22, 0);
+    _rxStats = lv_label_create(rawTab);
+    lv_obj_set_style_text_color(_rxStats, lv_color_hex(0x9FAABB), 0);
+    lv_obj_align(_rxStats, LV_ALIGN_TOP_LEFT, 8, 20);
+    lv_label_set_text(_rxStats, "dispatcher rx flood: 0 direct: 0");
+
+    _rxHitsLabel = lv_label_create(rawTab);
+    lv_obj_set_style_text_color(_rxHitsLabel, lv_color_hex(0x9FAABB), 0);
+    lv_obj_align(_rxHitsLabel, LV_ALIGN_TOP_LEFT, 8, 36);
+    lv_label_set_text(_rxHitsLabel, "rx calls: 0");
+
+    lv_obj_set_style_pad_top(_rawList, 56, 0);
 
     lv_obj_t* initHint = lv_list_add_text(_rawList, "Waiting for packets...");
     (void)initHint;
@@ -157,10 +184,13 @@ public:
   }
   void onClose() override {
     _tabview = nullptr;
+    _settingsText = nullptr;
     _rssi = nullptr;
     _snr = nullptr;
     _updated = nullptr;
     _rawDiag = nullptr;
+    _rxStats = nullptr;
+    _rxHitsLabel = nullptr;
     _rawList = nullptr;
     _rawSnapshot.clear();
   }
@@ -170,6 +200,30 @@ private:
   void refreshMetrics() {
     if (_rssi == nullptr || _snr == nullptr || _updated == nullptr) {
       return;
+    }
+
+    NodePrefs* prefs = the_mesh.getNodePrefs();
+    const float freq = prefs ? prefs->freq : static_cast<float>(LORA_FREQ);
+    const float bw = prefs ? prefs->bw : static_cast<float>(LORA_BW);
+    const int sf = prefs ? static_cast<int>(prefs->sf) : static_cast<int>(LORA_SF);
+    const int cr = prefs ? static_cast<int>(prefs->cr) : static_cast<int>(LORA_CR);
+    const int tx = prefs ? static_cast<int>(prefs->tx_power_dbm) : static_cast<int>(LORA_TX_POWER);
+    const float af = prefs ? prefs->airtime_factor : 1.0f;
+    const float duty = 100.0f / (af + 1.0f);
+
+    if (_settingsText) {
+      char settingsBuf[220];
+      snprintf(settingsBuf,
+               sizeof(settingsBuf),
+               "FREQ: %.3f MHz\nBW: %.1f kHz\nSF: %d\nCR: %d\nTX: %d dBm\nAF: %.1f\nDuty limit: %.1f%%",
+               (double)freq,
+               (double)bw,
+               sf,
+               cr,
+               tx,
+               (double)af,
+               (double)duty);
+      lv_label_set_text(_settingsText, settingsBuf);
     }
 
     int16_t rssi = 0;
@@ -206,6 +260,26 @@ private:
       lv_label_set_text(_rawDiag, diag);
     }
 
+    if (_rxStats) {
+      char rxBuf[72];
+      snprintf(rxBuf,
+               sizeof(rxBuf),
+               "dispatcher rx flood: %lu direct: %lu",
+               (unsigned long)the_mesh.getNumRecvFlood(),
+               (unsigned long)the_mesh.getNumRecvDirect());
+      lv_label_set_text(_rxStats, rxBuf);
+    }
+
+    if (_rxHitsLabel) {
+      char hitsBuf[72];
+      snprintf(hitsBuf,
+               sizeof(hitsBuf),
+               "rx calls: %lu  disp raw: %lu",
+               (unsigned long)grid::radio_telemetry::getRxCallHits(),
+               (unsigned long)grid::radio_telemetry::getDispatcherRxRawHits());
+      lv_label_set_text(_rxHitsLabel, hitsBuf);
+    }
+
     const uint32_t seq = grid::radio_telemetry::packetSequence();
     if (!force && seq == _lastPacketSeq) {
       return;
@@ -237,10 +311,13 @@ private:
   }
 
   lv_obj_t* _tabview;
+  lv_obj_t* _settingsText;
   lv_obj_t* _snr;
   lv_obj_t* _rssi;
   lv_obj_t* _updated;
   lv_obj_t* _rawDiag;
+  lv_obj_t* _rxStats;
+  lv_obj_t* _rxHitsLabel;
   lv_obj_t* _rawList;
   uint32_t _lastRefreshMs;
   uint32_t _lastPacketSeq;
@@ -372,7 +449,7 @@ void registerRadioApp(WindowManager& wm) {
 }
 
 void registerBleApp(WindowManager& wm) {
-  wm.registerApp({"ble", "BLE", LV_SYMBOL_WIFI,
+  wm.registerApp({"ble", "BLE", LV_SYMBOL_BLUETOOTH,
                   []() -> MeshApp* { return WindowManager::createInPsram<BleApp>(); }});
 }
 

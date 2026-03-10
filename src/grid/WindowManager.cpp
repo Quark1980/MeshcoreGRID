@@ -26,6 +26,7 @@ WindowManager::WindowManager()
       _statusBar(nullptr),
   _statusSignalLabel(nullptr),
   _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
+  _statusBleLabel(nullptr),
       _navBar(nullptr),
       _contentRoot(nullptr),
       _activeScreen(nullptr) {}
@@ -170,6 +171,12 @@ void WindowManager::buildStatusBar() {
   lv_obj_set_style_text_color(_statusSignalLabel, lv_color_hex(COLOR_DIM), 0);
   lv_obj_set_style_text_font(_statusSignalLabel, &lv_font_montserrat_14, 0);
 
+  _statusBleLabel = lv_label_create(_statusBar);
+  lv_label_set_text(_statusBleLabel, LV_SYMBOL_BLUETOOTH);
+  lv_obj_align(_statusBleLabel, LV_ALIGN_RIGHT_MID, -58, 0);
+  lv_obj_set_style_text_color(_statusBleLabel, lv_color_hex(COLOR_ACCENT), 0);
+  lv_obj_add_flag(_statusBleLabel, LV_OBJ_FLAG_HIDDEN);
+
   lv_obj_t* batt = lv_label_create(_statusBar);
   lv_label_set_text(batt, "84%");
   lv_obj_align(batt, LV_ALIGN_RIGHT_MID, -12, 0);
@@ -211,6 +218,15 @@ void WindowManager::updateStatusSignal() {
     }
     const bool on = i < barsOn;
     lv_obj_set_style_bg_color(_statusSignalBars[i], on ? lv_color_hex(0x59D37A) : lv_color_hex(0x384152), 0);
+  }
+
+  if (_statusBleLabel != nullptr) {
+    const bool bleEnabled = _bridge->isBleEnabled();
+    if (bleEnabled) {
+      lv_obj_clear_flag(_statusBleLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(_statusBleLabel, LV_OBJ_FLAG_HIDDEN);
+    }
   }
 }
 

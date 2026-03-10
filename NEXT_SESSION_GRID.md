@@ -21,3 +21,16 @@ Build the first touch GUI flow for **GRID** in companion radio UI:
 2. Add touch polling and coordinate mapping in UI task loop.
 3. Implement first touch navigation screen for GRID.
 4. Keep BLE companion flow as the default runtime target.
+
+## Critical working parameters (Heltec V4 TFT + LoRa)
+- Symptom if misconfigured: TFT may go white and/or LoRa RX stays at zero while BLE still works.
+- Required display flag in `variants/heltec_v4/platformio.ini` (GRID BLE env):
+	- `-D USE_HSPI_PORT=1`
+- Required LoRa SPI host selection in `variants/heltec_v4/target.cpp`:
+	- `static SPIClass spi(FSPI);`
+- Rationale: keep TFT and LoRa on separate internal SPI hosts to avoid controller contention.
+
+## Validation checklist after flashing
+1. Display boots normally (not white screen).
+2. BLE connection still works.
+3. Radio app Raw RX shows packets increasing when another node advertises.

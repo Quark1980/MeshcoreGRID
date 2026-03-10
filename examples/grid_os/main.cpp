@@ -6,7 +6,11 @@
 #include <lvgl.h>
 
 #include <Mesh.h>
+#ifdef BLE_PIN_CODE
 #include <helpers/esp32/SerialBLEInterface.h>
+#else
+#include <helpers/ArduinoSerialInterface.h>
+#endif
 #include <helpers/SimpleMeshTables.h>
 
 #include "../companion_radio/MyMesh.h"
@@ -19,7 +23,11 @@
 
 // ESP32 companion-radio compatible globals
 DataStore store(SPIFFS, rtc_clock);
+#ifdef BLE_PIN_CODE
 SerialBLEInterface serial_interface;
+#else
+ArduinoSerialInterface serial_interface;
+#endif
 StdRNG fast_rng;
 SimpleMeshTables tables;
 MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store, nullptr);
@@ -157,33 +165,16 @@ void lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 }
 
 void meshTask(void*) {
-  uint32_t lastRadioMetricsMs = 0;
+  // Legacy placeholder: GRID now runs mesh+UI cooperatively in loop() for radio stability.
   for (;;) {
-    the_mesh.loop();
-    sensors.loop();
-    rtc_clock.tick();
-
-    const uint32_t now = millis();
-    if (now - lastRadioMetricsMs >= 1000) {
-      lastRadioMetricsMs = now;
-      const int16_t rssi = static_cast<int16_t>(radio_driver.getLastRSSI());
-      const int8_t snr = static_cast<int8_t>(radio_driver.getLastSNR());
-      grid::radio_telemetry::updateMetrics(rssi, snr, now);
-      if (rssi < 0 && rssi > -200) {
-        MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS, nullptr, "radio", rssi, snr, now);
-      }
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
 void uiTask(void*) {
+  // Legacy placeholder: GRID now runs mesh+UI cooperatively in loop() for radio stability.
   for (;;) {
-    lv_tick_inc(5);
-    lv_timer_handler();
-    WindowManager::instance().tick();
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
@@ -234,10 +225,17 @@ void setup() {
   SPIFFS.begin(true);
   store.begin();
   the_mesh.begin(false);
+
+#ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
   the_mesh.bindInterface(serial_interface);
   the_mesh.stopInterface();
   gBleEnabled = false;
+#else
+  serial_interface.begin(Serial);
+  the_mesh.startInterface(serial_interface);
+  gBleEnabled = false;
+#endif
 
   // TFT + LVGL init (UI on Core 1)
 #ifdef PIN_TFT_LEDA_CTL
@@ -305,8 +303,13 @@ void setup() {
     return true;
   });
   bridge.setBleControl([]() {
+#ifdef BLE_PIN_CODE
     return gBleEnabled;
+#else
+    return false;
+#endif
   }, [](bool enabled) {
+#ifdef BLE_PIN_CODE
     if (enabled == gBleEnabled) {
       return true;
     }
@@ -320,6 +323,10 @@ void setup() {
     the_mesh.stopInterface();
     gBleEnabled = false;
     return true;
+  #else
+    (void)enabled;
+    return false;
+  #endif
   });
   bridge.setChannelProvider([](std::vector<MeshBridge::ChannelSummary>& out) {
     out.clear();
@@ -404,15 +411,38 @@ void setup() {
   registerChatApp(wm, bridge);
   registerNodesApp(wm, bridge);
   registerRadioApp(wm);
+#ifdef BLE_PIN_CODE
   registerBleApp(wm);
+#endif
   registerSettingsApp(wm);
   registerPowerApp(wm);
   wm.openApp("home", false);
 
-  xTaskCreatePinnedToCore(meshTask, "grid_mesh_core0", 6144, nullptr, 4, nullptr, 0);
-  xTaskCreatePinnedToCore(uiTask, "grid_ui_core1", 6144, nullptr, 3, nullptr, 1);
+  sensors.begin();
+
 }
 
 void loop() {
-  vTaskDelay(pdMS_TO_TICKS(100));
+  static uint32_t lastRadioMetricsMs = 0;
+
+  the_mesh.loop();
+  sensors.loop();
+  rtc_clock.tick();
+
+  lv_tick_inc(5);
+  lv_timer_handler();
+  WindowManager::instance().tick();
+
+  const uint32_t now = millis();
+  if (now - lastRadioMetricsMs >= 1000) {
+    lastRadioMetricsMs = now;
+    const int16_t rssi = static_cast<int16_t>(radio_driver.getLastRSSI());
+    const int8_t snr = static_cast<int8_t>(radio_driver.getLastSNR());
+    grid::radio_telemetry::updateMetrics(rssi, snr, now);
+    if (rssi < 0 && rssi > -200) {
+      MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS, nullptr, "radio", rssi, snr, now);
+    }
+  }
+
+  delay(5);
 }

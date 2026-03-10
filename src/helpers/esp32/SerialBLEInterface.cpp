@@ -1,6 +1,10 @@
 #include "SerialBLEInterface.h"
 #include "esp_mac.h"
 
+#if GRID_OS_BOOT
+#include "grid/RadioTelemetryStore.h"
+#endif
+
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
@@ -164,6 +168,16 @@ size_t SerialBLEInterface::writeFrame(const uint8_t src[], size_t len) {
     BLE_DEBUG_PRINTLN("writeFrame(), frame too big, len=%d", len);
     return 0;
   }
+
+#if GRID_OS_BOOT
+  // Mirror BLE companion RX-log frames into GRID telemetry so Raw RX page reflects exactly what BLE app sees.
+  if (len >= 4 && src[0] == 0x88) {
+    const int8_t snrQ = static_cast<int8_t>(src[1]);
+    const int8_t rssi = static_cast<int8_t>(src[2]);
+    const int8_t snr = static_cast<int8_t>(snrQ / 4);
+    grid::radio_telemetry::recordRawPacket(millis(), rssi, snr, &src[3], static_cast<int>(len - 3));
+  }
+#endif
 
   if (deviceConnected && len > 0) {
     if (send_queue_len >= FRAME_QUEUE_SIZE) {
