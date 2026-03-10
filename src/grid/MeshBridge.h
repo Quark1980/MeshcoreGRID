@@ -20,7 +20,21 @@
 
 class MeshBridge {
 public:
+  struct ChannelSummary {
+    uint8_t id;
+    std::string name;
+  };
+
+  struct ContactSummary {
+    uint32_t id;
+    std::string name;
+    uint32_t lastSeen;
+    bool heardRecently;
+  };
+
   using Observer = std::function<void(const MeshMessage&)>;
+  using ChannelProvider = std::function<void(std::vector<ChannelSummary>&)>;
+  using ContactProvider = std::function<void(std::vector<ContactSummary>&)>;
 
   static MeshBridge& instance();
 
@@ -43,7 +57,22 @@ public:
                     const char* sender = "",
                     int16_t rssi = 0,
                     int8_t snr = 0,
-                    uint32_t timestamp = 0);
+                    uint32_t timestamp = 0,
+                    uint32_t threadId = 0,
+                    bool isPrivate = false);
+
+  void setChannelProvider(ChannelProvider provider);
+  void setContactProvider(ContactProvider provider);
+  std::vector<ChannelSummary> getChannels() const;
+  std::vector<ContactSummary> getContacts() const;
+
+  void setThreadFilter(uint32_t id, bool isPrivate);
+  void clearThreadFilter();
+  bool isCurrentThread(uint32_t id, bool isPrivate) const;
+
+  int getUnreadCount(uint32_t id, bool isPrivate) const;
+  void clearUnread(uint32_t id, bool isPrivate);
+  std::vector<MeshMessage> getThreadHistory(uint32_t id, bool isPrivate) const;
 
   void subscribe(uint8_t packetType, Observer cb);
   void clearSubscribers(uint8_t packetType);
@@ -61,6 +90,8 @@ private:
     int16_t rssi;
     int8_t snr;
     uint32_t timestamp;
+    uint32_t threadId;
+    bool isPrivate;
     char sender[24];
     char text[MAX_PACKET_PAYLOAD];
   };
@@ -71,6 +102,10 @@ private:
   static void uiTaskTrampoline(void* ctx);
 
   static bool parseTextPayload(const mesh::Packet& pkt, std::string& outText, uint32_t& outTimestamp);
+  static uint32_t makeThreadKey(uint32_t id, bool isPrivate);
+  bool messageMatchesFilter(const MeshMessage& msg) const;
+  bool isTextPacketType(uint8_t packetType) const;
+  void appendThreadHistory(const MeshMessage& msg);
 
   mesh::Mesh* _mesh;
   QueueHandle_t _rxQueue;
@@ -84,7 +119,15 @@ private:
 
   BridgeTaskConfig _meshCfg;
   BridgeTaskConfig _uiCfg;
+  ChannelProvider _channelProvider;
+  ContactProvider _contactProvider;
+
+  bool _threadFilterEnabled;
+  uint32_t _threadFilterId;
+  bool _threadFilterPrivate;
 
   std::map<uint8_t, std::vector<Observer>> _observers;
+  std::map<uint32_t, int> _unreadCounts;
+  std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
   MeshApp* _activeApp;
 };

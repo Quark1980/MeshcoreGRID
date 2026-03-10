@@ -10,6 +10,8 @@ struct MeshMessage {
   int16_t rssi;
   int8_t snr;
   uint32_t timestamp;
+  uint32_t threadId;
+  bool isPrivate;
   std::string sender;
   std::string text;
 };

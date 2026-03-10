@@ -3,6 +3,16 @@
 #if GRID_OS_BOOT
   #include "grid/MeshBridge.h"
   #include "grid/MeshApp.h"
+
+namespace {
+uint32_t pubKeyPrefixToU32(const uint8_t* key) {
+  uint32_t id = 0;
+  if (key) {
+    memcpy(&id, key, sizeof(id));
+  }
+  return id;
+}
+}
 #endif
 
 #include <Arduino.h> // needed for PlatformIO
@@ -509,7 +519,20 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
                            const char *text) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
 #if GRID_OS_BOOT
-  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_TXT_MSG, text, from.name, 0, static_cast<int8_t>(pkt->getSNR()), sender_timestamp);
+  char senderName[24];
+  if (from.name[0]) {
+    StrHelper::strzcpy(senderName, from.name, sizeof(senderName));
+  } else {
+    snprintf(senderName, sizeof(senderName), "%02X%02X%02X%02X", from.id.pub_key[0], from.id.pub_key[1], from.id.pub_key[2], from.id.pub_key[3]);
+  }
+  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_TXT_MSG,
+                                      text,
+                                      senderName,
+                                      0,
+                                      static_cast<int8_t>(pkt->getSNR()),
+                                      sender_timestamp,
+                                      pubKeyPrefixToU32(from.id.pub_key),
+                                      true);
 #endif
   queueMessage(from, TXT_TYPE_PLAIN, pkt, sender_timestamp, NULL, 0, text);
 }
@@ -530,8 +553,16 @@ void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uin
 
 void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
                                   const char *text) {
+  uint8_t channel_idx = findChannelIdx(channel);
 #if GRID_OS_BOOT
-  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT, text, "#channel", 0, static_cast<int8_t>(pkt->getSNR()), timestamp);
+  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT,
+                                      text,
+                                      "#channel",
+                                      0,
+                                      static_cast<int8_t>(pkt->getSNR()),
+                                      timestamp,
+                                      channel_idx,
+                                      false);
 #endif
   int i = 0;
   if (app_target_ver >= 3) {
@@ -543,7 +574,6 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
     out_frame[i++] = RESP_CODE_CHANNEL_MSG_RECV;
   }
 
-  uint8_t channel_idx = findChannelIdx(channel);
   out_frame[i++] = channel_idx;
   uint8_t path_len = out_frame[i++] = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
 

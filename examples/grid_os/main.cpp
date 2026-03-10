@@ -2,6 +2,7 @@
 #include <SPIFFS.h>
 #include <TFT_eSPI.h>
 #include <Wire.h>
+#include <cstring>
 #include <lvgl.h>
 
 #include <Mesh.h>
@@ -24,6 +25,7 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store, nullptr);
 
 namespace {
 TFT_eSPI tft = TFT_eSPI();
+std::vector<MeshBridge::ContactSummary> gContactSnapshot;
 
 constexpr uint8_t TOUCH_SDA = 5;
 constexpr uint8_t TOUCH_SCL = 6;
@@ -281,6 +283,82 @@ void setup() {
 
   MeshBridge& bridge = MeshBridge::instance();
   bridge.begin(&the_mesh, nullptr, nullptr, nullptr, nullptr);
+  bridge.setChannelProvider([](std::vector<MeshBridge::ChannelSummary>& out) {
+    out.clear();
+    out.reserve(24);
+#ifdef MAX_GROUP_CHANNELS
+    const int maxChannels = MAX_GROUP_CHANNELS;
+#else
+    const int maxChannels = 40;
+#endif
+    constexpr int kProviderChannelCap = 24;
+    int emitted = 0;
+    for (int i = 0; i < maxChannels; ++i) {
+      ChannelDetails channel;
+      if (!the_mesh.getChannel(i, channel)) {
+        continue;
+      }
+
+      MeshBridge::ChannelSummary item{};
+      item.id = static_cast<uint8_t>(i);
+      if (channel.name[0]) {
+        const size_t nameLen = strnlen(channel.name, sizeof(channel.name));
+        item.name.assign(channel.name, nameLen);
+      } else {
+        item.name = "Channel";
+      }
+      out.push_back(item);
+
+      emitted++;
+      if (emitted >= kProviderChannelCap) {
+        break;
+      }
+    }
+  });
+  bridge.setContactProvider([](std::vector<MeshBridge::ContactSummary>& out) {
+    out = gContactSnapshot;
+  });
+
+  gContactSnapshot.clear();
+  gContactSnapshot.reserve(64);
+  {
+    const uint32_t now = the_mesh.getRTCClock()->getCurrentTime();
+    const int total = the_mesh.getNumContacts();
+    constexpr int kProviderContactCap = 64;
+    int emitted = 0;
+
+    for (int i = 0; i < total; ++i) {
+      ContactInfo contact;
+      if (!the_mesh.getContactByIdx(i, contact)) {
+        continue;
+      }
+
+      uint32_t contactId = 0;
+      memcpy(&contactId, contact.id.pub_key, sizeof(contactId));
+
+      char nameBuf[16] = {0};
+      if (!contact.name[0]) {
+        snprintf(nameBuf, sizeof(nameBuf), "%02X%02X%02X%02X", contact.id.pub_key[0], contact.id.pub_key[1], contact.id.pub_key[2], contact.id.pub_key[3]);
+      }
+
+      MeshBridge::ContactSummary item{};
+      item.id = contactId;
+      if (contact.name[0]) {
+        const size_t nameLen = strnlen(contact.name, sizeof(contact.name));
+        item.name.assign(contact.name, nameLen);
+      } else {
+        item.name = nameBuf;
+      }
+      item.lastSeen = contact.lastmod;
+      item.heardRecently = now >= contact.lastmod && (now - contact.lastmod) <= 15 * 60;
+      gContactSnapshot.push_back(item);
+
+      emitted++;
+      if (emitted >= kProviderContactCap) {
+        break;
+      }
+    }
+  }
 
   WindowManager& wm = WindowManager::instance();
   wm.begin(bridge);

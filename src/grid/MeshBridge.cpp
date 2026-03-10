@@ -20,6 +20,11 @@ MeshBridge::MeshBridge()
       _uiTask(nullptr),
       _meshCfg{nullptr, nullptr},
       _uiCfg{nullptr, nullptr},
+  _channelProvider(nullptr),
+  _contactProvider(nullptr),
+  _threadFilterEnabled(false),
+  _threadFilterId(0),
+  _threadFilterPrivate(false),
       _activeApp(nullptr) {}
 
 bool MeshBridge::begin(mesh::Mesh* meshInstance,
@@ -129,7 +134,9 @@ void MeshBridge::publishEvent(uint8_t eventType,
                               const char* sender,
                               int16_t rssi,
                               int8_t snr,
-                              uint32_t timestamp) {
+                              uint32_t timestamp,
+                              uint32_t threadId,
+                              bool isPrivate) {
   if (_rxQueue == nullptr) {
     return;
   }
@@ -139,6 +146,8 @@ void MeshBridge::publishEvent(uint8_t eventType,
   ev.rssi = rssi;
   ev.snr = snr;
   ev.timestamp = timestamp;
+  ev.threadId = threadId;
+  ev.isPrivate = isPrivate;
   if (sender) {
     strncpy(ev.sender, sender, sizeof(ev.sender) - 1);
   }
@@ -156,6 +165,68 @@ void MeshBridge::clearSubscribers(uint8_t packetType) {
   _observers.erase(packetType);
 }
 
+void MeshBridge::setChannelProvider(ChannelProvider provider) {
+  _channelProvider = provider;
+}
+
+void MeshBridge::setContactProvider(ContactProvider provider) {
+  _contactProvider = provider;
+}
+
+std::vector<MeshBridge::ChannelSummary> MeshBridge::getChannels() const {
+  std::vector<ChannelSummary> channels;
+  if (_channelProvider) {
+    _channelProvider(channels);
+  }
+  return channels;
+}
+
+std::vector<MeshBridge::ContactSummary> MeshBridge::getContacts() const {
+  std::vector<ContactSummary> contacts;
+  if (_contactProvider) {
+    _contactProvider(contacts);
+  }
+  return contacts;
+}
+
+void MeshBridge::setThreadFilter(uint32_t id, bool isPrivate) {
+  _threadFilterEnabled = true;
+  _threadFilterId = id;
+  _threadFilterPrivate = isPrivate;
+  clearUnread(id, isPrivate);
+}
+
+void MeshBridge::clearThreadFilter() {
+  _threadFilterEnabled = false;
+}
+
+bool MeshBridge::isCurrentThread(uint32_t id, bool isPrivate) const {
+  return _threadFilterEnabled && _threadFilterId == id && _threadFilterPrivate == isPrivate;
+}
+
+int MeshBridge::getUnreadCount(uint32_t id, bool isPrivate) const {
+  const uint32_t key = makeThreadKey(id, isPrivate);
+  auto it = _unreadCounts.find(key);
+  if (it == _unreadCounts.end()) {
+    return 0;
+  }
+  return it->second;
+}
+
+void MeshBridge::clearUnread(uint32_t id, bool isPrivate) {
+  const uint32_t key = makeThreadKey(id, isPrivate);
+  _unreadCounts.erase(key);
+}
+
+std::vector<MeshMessage> MeshBridge::getThreadHistory(uint32_t id, bool isPrivate) const {
+  const uint32_t key = makeThreadKey(id, isPrivate);
+  auto it = _threadHistory.find(key);
+  if (it == _threadHistory.end()) {
+    return {};
+  }
+  return it->second;
+}
+
 bool MeshBridge::pollForUi(MeshMessage& outMsg, TickType_t timeoutTicks) {
   if (_rxQueue == nullptr) {
     return false;
@@ -170,6 +241,8 @@ bool MeshBridge::pollForUi(MeshMessage& outMsg, TickType_t timeoutTicks) {
   outMsg.rssi = ev.rssi;
   outMsg.snr = ev.snr;
   outMsg.timestamp = ev.timestamp;
+  outMsg.threadId = ev.threadId;
+  outMsg.isPrivate = ev.isPrivate;
   outMsg.sender = ev.sender;
   outMsg.text = ev.text;
   return true;
@@ -180,7 +253,19 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
   uint32_t count = 0;
 
   while (count < maxMessagesPerTick && pollForUi(msg, 0)) {
-    if (_activeApp != nullptr) {
+    if (isTextPacketType(msg.packetType)) {
+      appendThreadHistory(msg);
+    }
+
+    if (isTextPacketType(msg.packetType) && !_threadFilterEnabled) {
+      const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
+      _unreadCounts[key]++;
+    } else if (isTextPacketType(msg.packetType) && !messageMatchesFilter(msg)) {
+      const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
+      _unreadCounts[key]++;
+    }
+
+    if (_activeApp != nullptr && messageMatchesFilter(msg)) {
       _activeApp->onMessageReceived(msg);
     }
 
@@ -196,6 +281,48 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
 
 void MeshBridge::setActiveApp(MeshApp* app) {
   _activeApp = app;
+}
+
+uint32_t MeshBridge::makeThreadKey(uint32_t id, bool isPrivate) {
+  return (id & 0x7FFFFFFF) | (isPrivate ? 0x80000000u : 0u);
+}
+
+bool MeshBridge::messageMatchesFilter(const MeshMessage& msg) const {
+  if (!_threadFilterEnabled) {
+    return true;
+  }
+  if (!isTextPacketType(msg.packetType)) {
+    return true;
+  }
+  return msg.threadId == _threadFilterId && msg.isPrivate == _threadFilterPrivate;
+}
+
+bool MeshBridge::isTextPacketType(uint8_t packetType) const {
+  return packetType == PAYLOAD_TYPE_TXT_MSG || packetType == PAYLOAD_TYPE_GRP_TXT;
+}
+
+void MeshBridge::appendThreadHistory(const MeshMessage& msg) {
+  constexpr size_t kMaxPerThread = 24;
+  constexpr size_t kMaxThreads = 16;
+
+  const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
+  auto& history = _threadHistory[key];
+  history.push_back(msg);
+  if (history.size() > kMaxPerThread) {
+    history.erase(history.begin(), history.begin() + (history.size() - kMaxPerThread));
+  }
+
+  if (_threadHistory.size() > kMaxThreads) {
+    auto oldest = _threadHistory.begin();
+    size_t minSize = oldest->second.size();
+    for (auto it = _threadHistory.begin(); it != _threadHistory.end(); ++it) {
+      if (it->second.size() < minSize) {
+        minSize = it->second.size();
+        oldest = it;
+      }
+    }
+    _threadHistory.erase(oldest);
+  }
 }
 
 void MeshBridge::meshTaskTrampoline(void* ctx) {
