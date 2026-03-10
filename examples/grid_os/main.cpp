@@ -56,7 +56,6 @@ void lvglFlush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) 
   const uint32_t h = static_cast<uint32_t>(area->y2 - area->y1 + 1);
   tft.startWrite();
   tft.setAddrWindow(area->x1, area->y1, w, h);
-  // LVGL 16-bit buffers on ESP32-S3 typically need byte swap on SPI panels.
   tft.pushColors(reinterpret_cast<uint16_t*>(color_p), w * h, true);
   tft.endWrite();
   lv_disp_flush_ready(disp);
@@ -189,7 +188,7 @@ void showSplash() {
   lv_obj_align(sub, LV_ALIGN_CENTER, 0, 18);
 
   uint32_t t0 = millis();
-  while (millis() - t0 < 1400) {
+  while (millis() - t0 < 300) {
     lv_tick_inc(10);
     lv_timer_handler();
     delay(10);
