@@ -24,6 +24,7 @@ MeshBridge::MeshBridge()
   _contactProvider(nullptr),
   _bleStateGetter(nullptr),
   _bleToggleHandler(nullptr),
+  _radioMetricsProvider(nullptr),
   _threadFilterEnabled(false),
   _threadFilterId(0),
   _threadFilterPrivate(false),
@@ -181,6 +182,27 @@ void MeshBridge::setContactProvider(ContactProvider provider) {
 void MeshBridge::setBleControl(BleStateGetter getter, BleToggleHandler setter) {
   _bleStateGetter = getter;
   _bleToggleHandler = setter;
+}
+
+void MeshBridge::setRadioMetricsProvider(RadioMetricsProvider provider) {
+  _radioMetricsProvider = provider;
+}
+
+bool MeshBridge::refreshRadioMetrics() {
+  if (!_radioMetricsProvider) {
+    return false;
+  }
+
+  int16_t rssi = 0;
+  int8_t snr = 0;
+  if (!_radioMetricsProvider(rssi, snr)) {
+    return false;
+  }
+
+  _lastRssi = rssi;
+  _lastSnr = snr;
+  _hasRadioMetrics = true;
+  return true;
 }
 
 bool MeshBridge::isBleEnabled() const {

@@ -15,6 +15,7 @@
 #include "grid/MeshBridge.h"
 #include "grid/WindowManager.h"
 #include "grid/GridApps.h"
+#include "grid/RadioTelemetryStore.h"
 
 // ESP32 companion-radio compatible globals
 DataStore store(SPIFFS, rtc_clock);
@@ -156,10 +157,23 @@ void lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
 }
 
 void meshTask(void*) {
+  uint32_t lastRadioMetricsMs = 0;
   for (;;) {
     the_mesh.loop();
     sensors.loop();
     rtc_clock.tick();
+
+    const uint32_t now = millis();
+    if (now - lastRadioMetricsMs >= 1000) {
+      lastRadioMetricsMs = now;
+      const int16_t rssi = static_cast<int16_t>(radio_driver.getLastRSSI());
+      const int8_t snr = static_cast<int8_t>(radio_driver.getLastSNR());
+      grid::radio_telemetry::updateMetrics(rssi, snr, now);
+      if (rssi < 0 && rssi > -200) {
+        MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS, nullptr, "radio", rssi, snr, now);
+      }
+    }
+
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
@@ -285,6 +299,11 @@ void setup() {
 
   MeshBridge& bridge = MeshBridge::instance();
   bridge.begin(&the_mesh, nullptr, nullptr, nullptr, nullptr);
+  bridge.setRadioMetricsProvider([](int16_t& rssi, int8_t& snr) {
+    rssi = static_cast<int16_t>(radio_driver.getLastRSSI());
+    snr = static_cast<int8_t>(radio_driver.getLastSNR());
+    return true;
+  });
   bridge.setBleControl([]() {
     return gBleEnabled;
   }, [](bool enabled) {

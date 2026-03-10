@@ -46,6 +46,7 @@ void WindowManager::tick() {
     _activeApp->onLoop();
   }
   if (_bridge) {
+    _bridge->refreshRadioMetrics();
     _bridge->dispatchForUi();
     updateStatusSignal();
   }

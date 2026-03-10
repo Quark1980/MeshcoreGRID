@@ -3,6 +3,7 @@
 #if GRID_OS_BOOT
   #include "grid/MeshBridge.h"
   #include "grid/MeshApp.h"
+  #include "grid/RadioTelemetryStore.h"
 
 namespace {
 uint32_t pubKeyPrefixToU32(const uint8_t* key) {
@@ -287,7 +288,7 @@ uint8_t MyMesh::getExtraAckTransmitCount() const {
 }
 
 void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
-  if (_serial->isConnected() && len + 3 <= MAX_FRAME_SIZE) {
+  if (_serial && _serial->isConnected() && len + 3 <= MAX_FRAME_SIZE) {
     int i = 0;
     out_frame[i++] = PUSH_CODE_LOG_RX_DATA;
     out_frame[i++] = (int8_t)(snr * 4);
@@ -297,6 +298,20 @@ void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
 
     _serial->writeFrame(out_frame, i);
   }
+
+#if GRID_OS_BOOT
+  grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
+                                         static_cast<int16_t>(rssi),
+                                         static_cast<int8_t>(snr),
+                                         raw,
+                                         len);
+  MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS,
+                                      nullptr,
+                                      "radio",
+                                      static_cast<int16_t>(rssi),
+                                      static_cast<int8_t>(snr),
+                                      getRTCClock()->getCurrentTime());
+#endif
 }
 
 bool MyMesh::isAutoAddEnabled() const {

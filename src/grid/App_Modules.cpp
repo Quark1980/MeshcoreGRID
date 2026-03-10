@@ -1,10 +1,12 @@
 #include "GridApps.h"
 
 #include "Packet.h"
+#include "RadioTelemetryStore.h"
 #include "WindowManager.h"
 #include "target.h"
 
 #include <string>
+#include <vector>
 
 void registerMessengerStubApp(WindowManager& wm, MeshBridge& bridge);
 
@@ -72,7 +74,15 @@ private:
 
 class RadioApp : public MeshApp {
 public:
-  explicit RadioApp(MeshBridge* bridge) : _bridge(bridge), _snr(nullptr), _rssi(nullptr) {}
+  RadioApp()
+      : _tabview(nullptr),
+        _rssi(nullptr),
+        _snr(nullptr),
+        _updated(nullptr),
+        _rawDiag(nullptr),
+        _rawList(nullptr),
+        _lastRefreshMs(0),
+        _lastPacketSeq(0) {}
   void release() override { this->~RadioApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
     lv_obj_t* t = lv_label_create(layout);
@@ -80,10 +90,17 @@ public:
     lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
     lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
 
-    lv_obj_t* card = lv_obj_create(layout);
-    lv_obj_set_size(card, LV_PCT(92), 160);
-    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 56);
-    lv_obj_set_style_radius(card, 14, 0);
+    _tabview = lv_tabview_create(layout, LV_DIR_TOP, 36);
+    lv_obj_set_size(_tabview, LV_PCT(96), LV_PCT(84));
+    lv_obj_align(_tabview, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    lv_obj_t* metricsTab = lv_tabview_add_tab(_tabview, "Metrics");
+    lv_obj_t* rawTab = lv_tabview_add_tab(_tabview, "Raw RX");
+
+    lv_obj_t* card = lv_obj_create(metricsTab);
+    lv_obj_set_size(card, LV_PCT(98), LV_PCT(96));
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_radius(card, 12, 0);
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
 
@@ -106,31 +123,128 @@ public:
     lv_label_set_text(_snr, "SNR: waiting");
     lv_obj_align(_snr, LV_ALIGN_TOP_LEFT, 12, 92);
 
-    if (_bridge) {
-      _bridge->subscribe(PAYLOAD_TYPE_TXT_MSG, [this](const MeshMessage& msg) { onMessageReceived(msg); });
-      _bridge->subscribe(PAYLOAD_TYPE_GRP_TXT, [this](const MeshMessage& msg) { onMessageReceived(msg); });
-    }
+    _updated = lv_label_create(card);
+    lv_label_set_text(_updated, "Updated: --");
+    lv_obj_set_style_text_color(_updated, lv_color_hex(0x9FAABB), 0);
+    lv_obj_align(_updated, LV_ALIGN_TOP_LEFT, 12, 116);
+
+    _rawList = lv_list_create(rawTab);
+    lv_obj_set_size(_rawList, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(_rawList, LV_ALIGN_TOP_MID, 0, 0);
+
+    _rawDiag = lv_label_create(rawTab);
+    lv_obj_set_style_text_color(_rawDiag, lv_color_hex(0x9FAABB), 0);
+    lv_obj_align(_rawDiag, LV_ALIGN_TOP_LEFT, 8, 4);
+    lv_label_set_text(_rawDiag, "raw packets: 0  last: --");
+
+    lv_obj_set_style_pad_top(_rawList, 22, 0);
+
+    lv_obj_t* initHint = lv_list_add_text(_rawList, "Waiting for packets...");
+    (void)initHint;
+
+    refreshMetrics();
+    refreshRawPackets(true);
   }
-  void onLoop() override {}
+  void onLoop() override {
+    const uint32_t now = millis();
+    if (now - _lastRefreshMs < 250) {
+      return;
+    }
+    _lastRefreshMs = now;
+
+    refreshMetrics();
+    refreshRawPackets(false);
+  }
   void onClose() override {
-    if (_bridge) {
-      _bridge->clearSubscribers(PAYLOAD_TYPE_TXT_MSG);
-      _bridge->clearSubscribers(PAYLOAD_TYPE_GRP_TXT);
-    }
-    _rssi = _snr = nullptr;
+    _tabview = nullptr;
+    _rssi = nullptr;
+    _snr = nullptr;
+    _updated = nullptr;
+    _rawDiag = nullptr;
+    _rawList = nullptr;
+    _rawSnapshot.clear();
   }
-  void onMessageReceived(MeshMessage msg) override {
-    if (_rssi == nullptr || _snr == nullptr) return;
-    char buf[32];
-    snprintf(buf, sizeof(buf), "RSSI: %d dBm", (int)msg.rssi);
-    lv_label_set_text(_rssi, buf);
-    snprintf(buf, sizeof(buf), "SNR: %d dB", (int)msg.snr);
-    lv_label_set_text(_snr, buf);
-  }
+  void onMessageReceived(MeshMessage) override {}
+
 private:
-  MeshBridge* _bridge;
+  void refreshMetrics() {
+    if (_rssi == nullptr || _snr == nullptr || _updated == nullptr) {
+      return;
+    }
+
+    int16_t rssi = 0;
+    int8_t snr = 0;
+    uint32_t ts = 0;
+    if (!grid::radio_telemetry::getLatestMetrics(rssi, snr, ts)) {
+      lv_label_set_text(_rssi, "RSSI: waiting");
+      lv_label_set_text(_snr, "SNR: waiting");
+      lv_label_set_text(_updated, "Updated: --");
+      return;
+    }
+
+    char buf[40];
+    snprintf(buf, sizeof(buf), "RSSI: %d dBm", (int)rssi);
+    lv_label_set_text(_rssi, buf);
+    snprintf(buf, sizeof(buf), "SNR: %d dB", (int)snr);
+    lv_label_set_text(_snr, buf);
+    snprintf(buf, sizeof(buf), "Updated: %lu", (unsigned long)ts);
+    lv_label_set_text(_updated, buf);
+  }
+
+  void refreshRawPackets(bool force) {
+    if (_rawList == nullptr) {
+      return;
+    }
+
+    if (_rawDiag) {
+      char diag[64];
+      snprintf(diag,
+               sizeof(diag),
+               "raw packets: %lu  last: %lu",
+               (unsigned long)grid::radio_telemetry::packetCount(),
+               (unsigned long)grid::radio_telemetry::lastRawPacketTimestamp());
+      lv_label_set_text(_rawDiag, diag);
+    }
+
+    const uint32_t seq = grid::radio_telemetry::packetSequence();
+    if (!force && seq == _lastPacketSeq) {
+      return;
+    }
+    _lastPacketSeq = seq;
+
+    grid::radio_telemetry::snapshotRawPackets(_rawSnapshot, 20);
+
+    lv_obj_clean(_rawList);
+    if (_rawSnapshot.empty()) {
+      lv_list_add_text(_rawList, "No packets yet");
+      return;
+    }
+
+    for (size_t i = 0; i < _rawSnapshot.size(); ++i) {
+      const auto& p = _rawSnapshot[i];
+      char header[64];
+      snprintf(header,
+               sizeof(header),
+               "t:%lu  r:%d  s:%d  len:%u",
+               (unsigned long)p.timestamp,
+               (int)p.rssi,
+               (int)p.snr,
+               (unsigned)p.byteLen);
+      lv_list_add_text(_rawList, header);
+      lv_obj_t* row = lv_list_add_btn(_rawList, nullptr, p.hex[0] ? p.hex : "(empty)");
+      lv_obj_set_style_text_font(row, &lv_font_montserrat_14, 0);
+    }
+  }
+
+  lv_obj_t* _tabview;
   lv_obj_t* _snr;
   lv_obj_t* _rssi;
+  lv_obj_t* _updated;
+  lv_obj_t* _rawDiag;
+  lv_obj_t* _rawList;
+  uint32_t _lastRefreshMs;
+  uint32_t _lastPacketSeq;
+  std::vector<grid::radio_telemetry::RawPacketEntry> _rawSnapshot;
 };
 
 class BleApp : public MeshApp {
@@ -254,7 +368,7 @@ void registerNodesApp(WindowManager& wm, MeshBridge& bridge) {
 
 void registerRadioApp(WindowManager& wm) {
   wm.registerApp({"radio", "Radio", LV_SYMBOL_WIFI,
-                  []() -> MeshApp* { return WindowManager::createInPsram<RadioApp>(&MeshBridge::instance()); }});
+                  []() -> MeshApp* { return WindowManager::createInPsram<RadioApp>(); }});
 }
 
 void registerBleApp(WindowManager& wm) {

@@ -37,6 +37,7 @@ public:
   using ContactProvider = std::function<void(std::vector<ContactSummary>&)>;
   using BleStateGetter = std::function<bool()>;
   using BleToggleHandler = std::function<bool(bool)>;
+  using RadioMetricsProvider = std::function<bool(int16_t&, int8_t&)>;
 
   static MeshBridge& instance();
 
@@ -66,6 +67,8 @@ public:
   void setChannelProvider(ChannelProvider provider);
   void setContactProvider(ContactProvider provider);
   void setBleControl(BleStateGetter getter, BleToggleHandler setter);
+  void setRadioMetricsProvider(RadioMetricsProvider provider);
+  bool refreshRadioMetrics();
   bool isBleEnabled() const;
   bool setBleEnabled(bool enabled);
   bool hasRadioMetrics() const;
@@ -131,6 +134,7 @@ private:
   ContactProvider _contactProvider;
   BleStateGetter _bleStateGetter;
   BleToggleHandler _bleToggleHandler;
+  RadioMetricsProvider _radioMetricsProvider;
 
   bool _threadFilterEnabled;
   uint32_t _threadFilterId;
