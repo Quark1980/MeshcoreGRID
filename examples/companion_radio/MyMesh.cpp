@@ -1,5 +1,10 @@
 #include "MyMesh.h"
 
+#if GRID_OS_BOOT
+  #include "grid/MeshBridge.h"
+  #include "grid/MeshApp.h"
+#endif
+
 #include <Arduino.h> // needed for PlatformIO
 #include <Mesh.h>
 
@@ -339,6 +344,9 @@ void MyMesh::onContactsFull() {
 }
 
 void MyMesh::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) {
+#if GRID_OS_BOOT
+  MeshBridge::instance().publishEvent(GRID_EVT_NODE_ADVERT, contact.name, contact.name, 0, 0, getRTCClock()->getCurrentTime());
+#endif
   if (_serial->isConnected()) {
     if (is_new) {
       writeContactRespFrame(PUSH_CODE_NEW_ADVERT, contact);
@@ -500,6 +508,9 @@ void MyMesh::sendFloodScoped(const mesh::GroupChannel& channel, mesh::Packet* pk
 void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
                            const char *text) {
   markConnectionActive(from); // in case this is from a server, and we have a connection
+#if GRID_OS_BOOT
+  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_TXT_MSG, text, from.name, 0, static_cast<int8_t>(pkt->getSNR()), sender_timestamp);
+#endif
   queueMessage(from, TXT_TYPE_PLAIN, pkt, sender_timestamp, NULL, 0, text);
 }
 
@@ -519,6 +530,9 @@ void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uin
 
 void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
                                   const char *text) {
+#if GRID_OS_BOOT
+  MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT, text, "#channel", 0, static_cast<int8_t>(pkt->getSNR()), timestamp);
+#endif
   int i = 0;
   if (app_target_ver >= 3) {
     out_frame[i++] = RESP_CODE_CHANNEL_MSG_RECV_V3;
