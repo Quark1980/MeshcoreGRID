@@ -35,6 +35,8 @@ public:
   using Observer = std::function<void(const MeshMessage&)>;
   using ChannelProvider = std::function<void(std::vector<ChannelSummary>&)>;
   using ContactProvider = std::function<void(std::vector<ContactSummary>&)>;
+  using BleStateGetter = std::function<bool()>;
+  using BleToggleHandler = std::function<bool(bool)>;
 
   static MeshBridge& instance();
 
@@ -63,6 +65,12 @@ public:
 
   void setChannelProvider(ChannelProvider provider);
   void setContactProvider(ContactProvider provider);
+  void setBleControl(BleStateGetter getter, BleToggleHandler setter);
+  bool isBleEnabled() const;
+  bool setBleEnabled(bool enabled);
+  bool hasRadioMetrics() const;
+  int16_t lastRssi() const;
+  int8_t lastSnr() const;
   std::vector<ChannelSummary> getChannels() const;
   std::vector<ContactSummary> getContacts() const;
 
@@ -121,10 +129,15 @@ private:
   BridgeTaskConfig _uiCfg;
   ChannelProvider _channelProvider;
   ContactProvider _contactProvider;
+  BleStateGetter _bleStateGetter;
+  BleToggleHandler _bleToggleHandler;
 
   bool _threadFilterEnabled;
   uint32_t _threadFilterId;
   bool _threadFilterPrivate;
+  bool _hasRadioMetrics;
+  int16_t _lastRssi;
+  int8_t _lastSnr;
 
   std::map<uint8_t, std::vector<Observer>> _observers;
   std::map<uint32_t, int> _unreadCounts;

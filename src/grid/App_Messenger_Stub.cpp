@@ -255,7 +255,8 @@ private:
     auto channels = _bridge->getChannels();
 
     if (channels.empty()) {
-      lv_list_add_text(_channelsList, "No channels configured");
+      lv_obj_t* t = lv_list_add_text(_channelsList, "No channels configured");
+      lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
       return;
     }
 
@@ -269,9 +270,11 @@ private:
       snprintf(label, sizeof(label), "%s", channel.name.c_str());
 
       lv_obj_t* row = lv_list_add_btn(_channelsList, LV_SYMBOL_LIST, label);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x121B24), 0);
+      lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
       lv_obj_set_style_border_width(row, 0, 0);
       lv_obj_set_style_pad_right(row, 34, 0);
+      lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
+      lv_obj_set_style_text_font(row, &lv_font_montserrat_16, 0);
 
       int unread = _bridge->getUnreadCount(channel.id, false);
       addUnreadBadge(row, unread);
@@ -284,7 +287,8 @@ private:
     if (channels.size() > kMaxRows) {
       char more[48];
       snprintf(more, sizeof(more), "+ %u more channels", static_cast<unsigned>(channels.size() - kMaxRows));
-      lv_list_add_text(_channelsList, more);
+      lv_obj_t* t = lv_list_add_text(_channelsList, more);
+      lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
     }
   }
 
@@ -298,7 +302,8 @@ private:
     auto contacts = _bridge->getContacts();
 
     if (contacts.empty()) {
-      lv_list_add_text(_contactsList, "No contacts in routing table");
+      lv_obj_t* t = lv_list_add_text(_contactsList, "No contacts in routing table");
+      lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
       return;
     }
 
@@ -312,8 +317,10 @@ private:
       snprintf(label, sizeof(label), "%s  ·  Last seen %s", contact.name.c_str(), relativeAge(contact.lastSeen));
 
       lv_obj_t* row = lv_list_add_btn(_contactsList, LV_SYMBOL_LIST, label);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x121B24), 0);
+      lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
       lv_obj_set_style_border_width(row, 0, 0);
+      lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
+      lv_obj_set_style_text_font(row, &lv_font_montserrat_16, 0);
 
       if (contact.heardRecently) {
         lv_obj_set_style_border_color(row, lv_color_hex(0x27D468), 0);
@@ -328,7 +335,8 @@ private:
     if (contacts.size() > kMaxRows) {
       char more[48];
       snprintf(more, sizeof(more), "+ %u more contacts", static_cast<unsigned>(contacts.size() - kMaxRows));
-      lv_list_add_text(_contactsList, more);
+      lv_obj_t* t = lv_list_add_text(_contactsList, more);
+      lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
     }
   }
 
@@ -346,6 +354,8 @@ private:
 
     lv_obj_t* last = lv_obj_get_child(_threadList, lv_obj_get_child_cnt(_threadList) - 1);
     if (last != nullptr) {
+      lv_obj_set_style_text_color(last, lv_color_hex(0xEDF4FF), 0);
+      lv_obj_set_style_text_font(last, &lv_font_montserrat_16, 0);
       lv_obj_scroll_to_view(last, LV_ANIM_OFF);
     }
   }
@@ -386,11 +396,9 @@ private:
     }
 
     if (!addedHistory) {
-      if (isPrivate) {
-        appendThreadLine("System", "Direct thread ready", 0);
-      } else {
-        appendThreadLine("System", "Channel thread ready", 0);
-      }
+      lv_obj_t* empty = lv_list_add_text(_threadList, "No messages yet");
+      lv_obj_set_style_text_color(empty, lv_color_hex(0xDCE7F5), 0);
+      lv_obj_set_style_text_font(empty, &lv_font_montserrat_16, 0);
     }
   }
 

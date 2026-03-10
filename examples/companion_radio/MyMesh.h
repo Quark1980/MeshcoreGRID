@@ -89,7 +89,9 @@ public:
   MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMeshTables &tables, DataStore& store, AbstractUITask* ui=NULL);
 
   void begin(bool has_display);
+  void bindInterface(BaseSerialInterface &serial);
   void startInterface(BaseSerialInterface &serial);
+  void stopInterface();
 
   const char *getNodeName();
   NodePrefs *getNodePrefs();

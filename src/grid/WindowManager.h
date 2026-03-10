@@ -51,6 +51,7 @@ private:
   void buildShell(lv_obj_t* root);
   void buildStatusBar();
   void buildNavigationBar();
+  void updateStatusSignal();
   void createTheme();
   void powerPeripherals();
 
@@ -69,6 +70,8 @@ private:
 
   lv_obj_t* _root;
   lv_obj_t* _statusBar;
+  lv_obj_t* _statusSignalLabel;
+  lv_obj_t* _statusSignalBars[4];
   lv_obj_t* _navBar;
   lv_obj_t* _contentRoot;
   lv_obj_t* _activeScreen;

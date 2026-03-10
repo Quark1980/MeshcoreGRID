@@ -50,6 +50,7 @@ bool touchReady = false;
 uint8_t touchAddr = FT6336U_ADDR;
 uint8_t touchSda = TOUCH_SDA;
 uint8_t touchScl = TOUCH_SCL;
+bool gBleEnabled = false;
 
 void lvglFlush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   const uint32_t w = static_cast<uint32_t>(area->x2 - area->x1 + 1);
@@ -165,10 +166,10 @@ void meshTask(void*) {
 
 void uiTask(void*) {
   for (;;) {
-    lv_tick_inc(8);
+    lv_tick_inc(5);
     lv_timer_handler();
     WindowManager::instance().tick();
-    vTaskDelay(pdMS_TO_TICKS(8));
+    vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
 
@@ -220,7 +221,9 @@ void setup() {
   store.begin();
   the_mesh.begin(false);
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
-  the_mesh.startInterface(serial_interface);
+  the_mesh.bindInterface(serial_interface);
+  the_mesh.stopInterface();
+  gBleEnabled = false;
 
   // TFT + LVGL init (UI on Core 1)
 #ifdef PIN_TFT_LEDA_CTL
@@ -282,6 +285,23 @@ void setup() {
 
   MeshBridge& bridge = MeshBridge::instance();
   bridge.begin(&the_mesh, nullptr, nullptr, nullptr, nullptr);
+  bridge.setBleControl([]() {
+    return gBleEnabled;
+  }, [](bool enabled) {
+    if (enabled == gBleEnabled) {
+      return true;
+    }
+
+    if (enabled) {
+      the_mesh.startInterface(serial_interface);
+      gBleEnabled = true;
+      return true;
+    }
+
+    the_mesh.stopInterface();
+    gBleEnabled = false;
+    return true;
+  });
   bridge.setChannelProvider([](std::vector<MeshBridge::ChannelSummary>& out) {
     out.clear();
     out.reserve(24);

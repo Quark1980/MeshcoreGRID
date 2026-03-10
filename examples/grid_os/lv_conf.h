@@ -24,7 +24,7 @@
  *  HAL SETTINGS
  *====================*/
 /*Default display refresh, input device read and animation step period.*/
-#define LV_DEF_REFR_PERIOD       10 /*[ms]*/
+#define LV_DEF_REFR_PERIOD       16 /*[ms]*/
 
 /*=======================
  * FEATURE CONFIGURATION

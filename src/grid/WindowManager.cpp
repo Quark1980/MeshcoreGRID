@@ -5,6 +5,7 @@
 namespace {
 constexpr int kStatusHeight = 32;
 constexpr int kNavHeight = 52;
+constexpr bool kEnableFullscreenSlideAnimation = false;
 
 constexpr uint32_t COLOR_BG = 0x101318;
 constexpr uint32_t COLOR_SURFACE = 0x1A1F27;
@@ -23,6 +24,8 @@ WindowManager::WindowManager()
       _activeApp(nullptr),
       _root(nullptr),
       _statusBar(nullptr),
+  _statusSignalLabel(nullptr),
+  _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
       _navBar(nullptr),
       _contentRoot(nullptr),
       _activeScreen(nullptr) {}
@@ -44,6 +47,7 @@ void WindowManager::tick() {
   }
   if (_bridge) {
     _bridge->dispatchForUi();
+    updateStatusSignal();
   }
 }
 
@@ -144,15 +148,69 @@ void WindowManager::buildStatusBar() {
   lv_obj_align(clock, LV_ALIGN_LEFT_MID, 10, 0);
   lv_obj_set_style_text_color(clock, lv_color_hex(COLOR_TEXT), 0);
 
-  lv_obj_t* net = lv_label_create(_statusBar);
-  lv_label_set_text(net, "RSSI -92");
-  lv_obj_align(net, LV_ALIGN_CENTER, 0, 0);
-  lv_obj_set_style_text_color(net, lv_color_hex(COLOR_DIM), 0);
+  lv_obj_t* meter = lv_obj_create(_statusBar);
+  lv_obj_remove_style_all(meter);
+  lv_obj_set_size(meter, 122, 24);
+  lv_obj_align(meter, LV_ALIGN_CENTER, 0, 0);
+
+  for (int i = 0; i < 4; ++i) {
+    _statusSignalBars[i] = lv_obj_create(meter);
+    lv_obj_remove_style_all(_statusSignalBars[i]);
+    lv_obj_set_size(_statusSignalBars[i], 4, 6 + i * 4);
+    lv_obj_align(_statusSignalBars[i], LV_ALIGN_LEFT_MID, i * 6, 4 - i * 2);
+    lv_obj_set_style_radius(_statusSignalBars[i], 1, 0);
+    lv_obj_set_style_bg_color(_statusSignalBars[i], lv_color_hex(0x384152), 0);
+    lv_obj_set_style_bg_opa(_statusSignalBars[i], LV_OPA_COVER, 0);
+  }
+
+  _statusSignalLabel = lv_label_create(meter);
+  lv_label_set_text(_statusSignalLabel, "SNR --");
+  lv_obj_align(_statusSignalLabel, LV_ALIGN_LEFT_MID, 30, 0);
+  lv_obj_set_style_text_color(_statusSignalLabel, lv_color_hex(COLOR_DIM), 0);
+  lv_obj_set_style_text_font(_statusSignalLabel, &lv_font_montserrat_14, 0);
 
   lv_obj_t* batt = lv_label_create(_statusBar);
   lv_label_set_text(batt, "84%");
   lv_obj_align(batt, LV_ALIGN_RIGHT_MID, -12, 0);
   lv_obj_set_style_text_color(batt, lv_color_hex(COLOR_TEXT), 0);
+}
+
+void WindowManager::updateStatusSignal() {
+  if (_bridge == nullptr || _statusSignalLabel == nullptr) {
+    return;
+  }
+
+  int barsOn = 0;
+  int8_t snr = 0;
+
+  if (_bridge->hasRadioMetrics()) {
+    const int16_t rssi = _bridge->lastRssi();
+    snr = _bridge->lastSnr();
+
+    if (rssi >= -70) {
+      barsOn = 4;
+    } else if (rssi >= -85) {
+      barsOn = 3;
+    } else if (rssi >= -100) {
+      barsOn = 2;
+    } else if (rssi >= -112) {
+      barsOn = 1;
+    }
+
+    char snrText[24];
+    snprintf(snrText, sizeof(snrText), "SNR %d dB", (int)snr);
+    lv_label_set_text(_statusSignalLabel, snrText);
+  } else {
+    lv_label_set_text(_statusSignalLabel, "SNR --");
+  }
+
+  for (int i = 0; i < 4; ++i) {
+    if (_statusSignalBars[i] == nullptr) {
+      continue;
+    }
+    const bool on = i < barsOn;
+    lv_obj_set_style_bg_color(_statusSignalBars[i], on ? lv_color_hex(0x59D37A) : lv_color_hex(0x384152), 0);
+  }
 }
 
 void WindowManager::buildNavigationBar() {
@@ -187,8 +245,8 @@ void WindowManager::createTheme() {
   lv_style_set_border_color(&_styleCard, lv_color_hex(0x2A3039));
   lv_style_set_border_width(&_styleCard, 1);
   lv_style_set_radius(&_styleCard, 14);
-  lv_style_set_shadow_width(&_styleCard, 18);
-  lv_style_set_shadow_opa(&_styleCard, LV_OPA_20);
+  lv_style_set_shadow_width(&_styleCard, 0);
+  lv_style_set_shadow_opa(&_styleCard, LV_OPA_TRANSP);
   lv_style_set_shadow_color(&_styleCard, lv_color_black());
 
   lv_style_init(&_styleStatus);
@@ -227,6 +285,12 @@ void WindowManager::powerPeripherals() {
 }
 
 void WindowManager::transitionTo(lv_obj_t* newScreen, bool fromRight) {
+  if (!kEnableFullscreenSlideAnimation) {
+    lv_obj_set_pos(newScreen, 0, 0);
+    _activeScreen = newScreen;
+    return;
+  }
+
   const int width = lv_obj_get_width(_contentRoot);
   const int startX = fromRight ? width : -width;
   const int endX = 0;
@@ -237,21 +301,10 @@ void WindowManager::transitionTo(lv_obj_t* newScreen, bool fromRight) {
   lv_anim_init(&inAnim);
   lv_anim_set_var(&inAnim, newScreen);
   lv_anim_set_exec_cb(&inAnim, (lv_anim_exec_xcb_t)lv_obj_set_x);
-  lv_anim_set_time(&inAnim, 180);
+  lv_anim_set_time(&inAnim, 100);
   lv_anim_set_values(&inAnim, startX, endX);
   lv_anim_set_path_cb(&inAnim, lv_anim_path_ease_out);
   lv_anim_start(&inAnim);
-
-  if (_activeScreen) {
-    lv_anim_t outAnim;
-    lv_anim_init(&outAnim);
-    lv_anim_set_var(&outAnim, _activeScreen);
-    lv_anim_set_exec_cb(&outAnim, (lv_anim_exec_xcb_t)lv_obj_set_x);
-    lv_anim_set_time(&outAnim, 180);
-    lv_anim_set_values(&outAnim, 0, -startX / 3);
-    lv_anim_set_path_cb(&outAnim, lv_anim_path_ease_in);
-    lv_anim_start(&outAnim);
-  }
 
   _activeScreen = newScreen;
 }

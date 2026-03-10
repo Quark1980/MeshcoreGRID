@@ -962,8 +962,18 @@ bool MyMesh::isValidClientRepeatFreq(uint32_t f) const {
 }
 
 void MyMesh::startInterface(BaseSerialInterface &serial) {
-  _serial = &serial;
+  bindInterface(serial);
   serial.enable();
+}
+
+void MyMesh::bindInterface(BaseSerialInterface &serial) {
+  _serial = &serial;
+}
+
+void MyMesh::stopInterface() {
+  if (_serial) {
+    _serial->disable();
+  }
 }
 
 void MyMesh::handleCmdFrame(size_t len) {

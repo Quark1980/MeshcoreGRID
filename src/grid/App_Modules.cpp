@@ -143,15 +143,14 @@ public:
     lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
 
     lv_obj_t* card = lv_obj_create(layout);
-    lv_obj_set_size(card, LV_PCT(92), 130);
+    lv_obj_set_size(card, LV_PCT(92), 176);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 56);
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
 
-    lv_obj_t* state = lv_label_create(card);
-    lv_label_set_text(state, "Companion BLE: enabled");
-    lv_obj_align(state, LV_ALIGN_TOP_LEFT, 12, 14);
+    _state = lv_label_create(card);
+    lv_obj_align(_state, LV_ALIGN_TOP_LEFT, 12, 14);
 
     char pinText[64];
 #ifdef BLE_PIN_CODE
@@ -163,10 +162,41 @@ public:
     lv_label_set_text(pin, pinText);
     lv_obj_set_style_text_font(pin, &lv_font_montserrat_20, 0);
     lv_obj_align(pin, LV_ALIGN_TOP_LEFT, 12, 50);
+
+    _toggleBtn = lv_btn_create(card);
+    lv_obj_set_size(_toggleBtn, 136, 40);
+    lv_obj_align(_toggleBtn, LV_ALIGN_BOTTOM_LEFT, 12, -12);
+    _toggleText = lv_label_create(_toggleBtn);
+    lv_obj_center(_toggleText);
+    lv_obj_add_event_cb(_toggleBtn, [](lv_event_t* e) {
+      auto* self = static_cast<BleApp*>(lv_event_get_user_data(e));
+      if (self) {
+        const bool currentlyEnabled = MeshBridge::instance().isBleEnabled();
+        MeshBridge::instance().setBleEnabled(!currentlyEnabled);
+        self->refreshUi();
+      }
+    }, LV_EVENT_CLICKED, this);
+
+    refreshUi();
   }
   void onLoop() override {}
-  void onClose() override {}
+  void onClose() override { _state = nullptr; _toggleBtn = nullptr; _toggleText = nullptr; }
   void onMessageReceived(MeshMessage) override {}
+
+private:
+  void refreshUi() {
+    if (_state == nullptr || _toggleText == nullptr) {
+      return;
+    }
+
+    const bool enabled = MeshBridge::instance().isBleEnabled();
+    lv_label_set_text(_state, enabled ? "Companion BLE: enabled" : "Companion BLE: disabled");
+    lv_label_set_text(_toggleText, enabled ? "Turn BLE Off" : "Turn BLE On");
+  }
+
+  lv_obj_t* _state = nullptr;
+  lv_obj_t* _toggleBtn = nullptr;
+  lv_obj_t* _toggleText = nullptr;
 };
 
 class PowerApp : public MeshApp {

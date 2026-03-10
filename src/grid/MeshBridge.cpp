@@ -22,9 +22,14 @@ MeshBridge::MeshBridge()
       _uiCfg{nullptr, nullptr},
   _channelProvider(nullptr),
   _contactProvider(nullptr),
+  _bleStateGetter(nullptr),
+  _bleToggleHandler(nullptr),
   _threadFilterEnabled(false),
   _threadFilterId(0),
   _threadFilterPrivate(false),
+      _hasRadioMetrics(false),
+      _lastRssi(-127),
+      _lastSnr(0),
       _activeApp(nullptr) {}
 
 bool MeshBridge::begin(mesh::Mesh* meshInstance,
@@ -173,6 +178,37 @@ void MeshBridge::setContactProvider(ContactProvider provider) {
   _contactProvider = provider;
 }
 
+void MeshBridge::setBleControl(BleStateGetter getter, BleToggleHandler setter) {
+  _bleStateGetter = getter;
+  _bleToggleHandler = setter;
+}
+
+bool MeshBridge::isBleEnabled() const {
+  if (_bleStateGetter) {
+    return _bleStateGetter();
+  }
+  return false;
+}
+
+bool MeshBridge::setBleEnabled(bool enabled) {
+  if (_bleToggleHandler) {
+    return _bleToggleHandler(enabled);
+  }
+  return false;
+}
+
+bool MeshBridge::hasRadioMetrics() const {
+  return _hasRadioMetrics;
+}
+
+int16_t MeshBridge::lastRssi() const {
+  return _lastRssi;
+}
+
+int8_t MeshBridge::lastSnr() const {
+  return _lastSnr;
+}
+
 std::vector<MeshBridge::ChannelSummary> MeshBridge::getChannels() const {
   std::vector<ChannelSummary> channels;
   if (_channelProvider) {
@@ -253,6 +289,10 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
   uint32_t count = 0;
 
   while (count < maxMessagesPerTick && pollForUi(msg, 0)) {
+    _lastRssi = msg.rssi;
+    _lastSnr = msg.snr;
+    _hasRadioMetrics = true;
+
     if (isTextPacketType(msg.packetType)) {
       appendThreadHistory(msg);
     }
