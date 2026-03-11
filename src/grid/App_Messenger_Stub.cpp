@@ -1,11 +1,39 @@
 #include "WindowManager.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 #include "Packet.h"
 
 namespace {
+
+constexpr lv_coord_t kKeyboardHeight = 180;
+constexpr lv_coord_t kBottomNavHeight = 52;
+
+lv_obj_t* gKeyboard = nullptr;
+lv_obj_t* gKeyboardTarget = nullptr;
+
+void animHeightExec(void* var, int32_t value) {
+  lv_obj_set_height(static_cast<lv_obj_t*>(var), value);
+}
+
+lv_color_t senderColor(const char* sender) {
+  static const uint32_t palette[] = {
+    0x4CC9A6, 0xF9C74F, 0xF9844A, 0x90BE6D, 0x43AA8B, 0xA1C181, 0x79C2D0
+  };
+
+  if (sender == nullptr || sender[0] == '\0') {
+    return lv_color_hex(0x8EA0B4);
+  }
+
+  uint32_t hash = 2166136261u;
+  for (const unsigned char* p = reinterpret_cast<const unsigned char*>(sender); *p != '\0'; ++p) {
+    hash ^= static_cast<uint32_t>(*p);
+    hash *= 16777619u;
+  }
+  return lv_color_hex(palette[hash % (sizeof(palette) / sizeof(palette[0]))]);
+}
 
 class MessengerManagerApp : public MeshApp {
 public:
@@ -13,6 +41,15 @@ public:
     lv_obj_t* row;
     uint32_t id;
     bool isPrivate;
+  };
+
+  struct PendingEchoBubble {
+    uint32_t threadId;
+    bool isPrivate;
+    uint32_t timestamp;
+    std::string text;
+    uint8_t timesHeard;
+    lv_obj_t* metaLabel;
   };
 
   explicit MessengerManagerApp(MeshBridge* bridge)
@@ -26,6 +63,9 @@ public:
         _channelsList(nullptr),
         _contactsList(nullptr),
         _threadList(nullptr),
+        _composer(nullptr),
+        _input(nullptr),
+        _sendBtn(nullptr),
         _inThread(false),
         _threadId(0),
         _threadPrivate(false),
@@ -56,6 +96,9 @@ public:
       _bridge->clearThreadFilter();
     }
 
+    WindowManager::instance().resetRightNavAction();
+    hideKeyboard();
+
     _layout = nullptr;
   }
 
@@ -70,7 +113,18 @@ public:
       return;
     }
 
-    appendThreadLine(msg.sender.c_str(), msg.text.c_str(), msg.timestamp);
+    if (msg.isLocal && tryResolveEcho(msg)) {
+      return;
+    }
+
+    lv_obj_t* meta = appendThreadBubble(msg.sender.c_str(),
+                                        msg.text.c_str(),
+                                        msg.hopCount,
+                                        msg.isLocal,
+                                        msg.timesHeard);
+    if (msg.isLocal) {
+      _pendingEchoes.push_back({msg.threadId, msg.isPrivate, msg.timestamp, msg.text, msg.timesHeard, meta});
+    }
   }
 
 private:
@@ -104,10 +158,35 @@ private:
     }
   }
 
-  static void onBackToTabs(lv_event_t* e) {
+  static void onBackToTabs(lv_event_t* e) { (void)e; }
+
+  static void onInputFocused(lv_event_t* e) {
     auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
     if (self != nullptr) {
-      self->backToLanding();
+      self->showKeyboardForInput(static_cast<lv_obj_t*>(lv_event_get_target(e)));
+    }
+  }
+
+  static void onInputDefocused(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->hideKeyboard();
+    }
+  }
+
+  static void onInputReady(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->sendCurrentInput();
+      self->hideKeyboard();
+    }
+  }
+
+  static void onSendClicked(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->sendCurrentInput();
+      self->hideKeyboard();
     }
   }
 
@@ -145,7 +224,7 @@ private:
     lv_obj_center(backLabel);
 
     _title = lv_label_create(_header);
-    lv_obj_set_style_text_font(_title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(_title, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(_title, lv_color_hex(0xE8EFF7), 0);
     lv_label_set_text(_title, "Messenger");
     lv_obj_align(_title, LV_ALIGN_CENTER, 0, 0);
@@ -155,7 +234,7 @@ private:
     lv_obj_align(_content, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_bg_opa(_content, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(_content, 0, 0);
-    lv_obj_set_style_pad_top(_content, 46, 0);
+    lv_obj_set_style_pad_top(_content, 42, 0);
     lv_obj_set_style_pad_left(_content, 0, 0);
     lv_obj_set_style_pad_right(_content, 0, 0);
     lv_obj_set_style_pad_bottom(_content, 0, 0);
@@ -163,11 +242,159 @@ private:
 
   void clearContent() {
     _rowBindings.clear();
+    _pendingEchoes.clear();
     lv_obj_clean(_content);
     _tabview = nullptr;
     _channelsList = nullptr;
     _contactsList = nullptr;
     _threadList = nullptr;
+    _composer = nullptr;
+    _input = nullptr;
+    _sendBtn = nullptr;
+  }
+
+  void ensureGlobalKeyboard() {
+    if (gKeyboard != nullptr || _layout == nullptr) {
+      return;
+    }
+
+    gKeyboard = lv_keyboard_create(lv_layer_top());
+    lv_obj_set_size(gKeyboard, LV_PCT(100), kKeyboardHeight);
+    lv_obj_align(gKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_add_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_mode(gKeyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+
+    lv_obj_set_style_bg_color(gKeyboard, lv_color_hex(0x101820), 0);
+    lv_obj_set_style_bg_opa(gKeyboard, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(gKeyboard, 0, 0);
+    lv_obj_set_style_bg_color(gKeyboard, lv_color_hex(0x1B2530), LV_PART_ITEMS);
+    lv_obj_set_style_text_color(gKeyboard, lv_color_hex(0xE7F0FB), LV_PART_ITEMS);
+    lv_obj_set_style_radius(gKeyboard, 6, LV_PART_ITEMS);
+  }
+
+  void animateThreadListHeight(int32_t targetHeight) {
+    if (_threadList == nullptr) {
+      return;
+    }
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, _threadList);
+    lv_anim_set_values(&a, lv_obj_get_height(_threadList), targetHeight);
+    lv_anim_set_time(&a, 180);
+    lv_anim_set_exec_cb(&a, animHeightExec);
+    lv_anim_start(&a);
+  }
+
+  int32_t keyboardOverlapInContent() const {
+    if (_content == nullptr || gKeyboard == nullptr || lv_obj_has_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN)) {
+      return 0;
+    }
+
+    lv_area_t contentArea;
+    lv_area_t keyboardArea;
+    lv_obj_get_coords(_content, &contentArea);
+    lv_obj_get_coords(gKeyboard, &keyboardArea);
+
+    const int32_t top = std::max(contentArea.y1, keyboardArea.y1);
+    const int32_t bottom = std::min(contentArea.y2, keyboardArea.y2);
+    if (bottom < top) {
+      return 0;
+    }
+    return bottom - top + 1;
+  }
+
+  int32_t navOverlapInContent() const {
+    if (_content == nullptr) {
+      return 0;
+    }
+
+    lv_area_t contentArea;
+    lv_obj_get_coords(_content, &contentArea);
+
+    const int32_t contentTop = static_cast<int32_t>(contentArea.y1);
+    const int32_t contentBottom = static_cast<int32_t>(contentArea.y2);
+    const int32_t navTop = LV_VER_RES - kBottomNavHeight;
+    const int32_t navBottom = LV_VER_RES - 1;
+    const int32_t top = std::max(contentTop, navTop);
+    const int32_t bottom = std::min(contentBottom, navBottom);
+    if (bottom < top) {
+      return 0;
+    }
+    return bottom - top + 1;
+  }
+
+  int32_t bottomObstructionInContent() const {
+    return std::max(navOverlapInContent(), keyboardOverlapInContent());
+  }
+
+  void showKeyboardForInput(lv_obj_t* input) {
+    if (_content == nullptr || _threadList == nullptr || input == nullptr) {
+      return;
+    }
+
+    ensureGlobalKeyboard();
+    if (gKeyboard == nullptr) {
+      return;
+    }
+
+    gKeyboardTarget = input;
+    lv_keyboard_set_textarea(gKeyboard, input);
+    lv_obj_clear_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+
+    const int32_t obstruction = bottomObstructionInContent();
+
+    if (_composer != nullptr) {
+      lv_obj_move_foreground(_composer);
+      lv_obj_align(_composer, LV_ALIGN_BOTTOM_MID, 0, -obstruction);
+    }
+
+    const int32_t composerH = (_composer != nullptr) ? lv_obj_get_height(_composer) : 0;
+    const int32_t target = lv_obj_get_height(_content) - composerH - obstruction;
+    animateThreadListHeight(target);
+  }
+
+  void hideKeyboard() {
+    if (_content == nullptr || _threadList == nullptr) {
+      return;
+    }
+
+    if (gKeyboard != nullptr) {
+      lv_keyboard_set_textarea(gKeyboard, nullptr);
+      lv_obj_add_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+    }
+    gKeyboardTarget = nullptr;
+
+    if (_composer != nullptr) {
+      lv_obj_align(_composer, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
+
+    int32_t target = lv_obj_get_height(_content) - navOverlapInContent();
+    if (_composer != nullptr && !lv_obj_has_flag(_composer, LV_OBJ_FLAG_HIDDEN)) {
+      target -= lv_obj_get_height(_composer);
+    }
+    animateThreadListHeight(target);
+  }
+
+  void showComposer() {
+    if (_composer == nullptr || _input == nullptr) {
+      return;
+    }
+
+    lv_obj_clear_flag(_composer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(_composer);
+    lv_textarea_set_text(_input, "");
+    showKeyboardForInput(_input);
+  }
+
+  void hideComposer() {
+    hideKeyboard();
+    if (_composer != nullptr) {
+      lv_obj_add_flag(_composer, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (_threadList != nullptr && _content != nullptr) {
+      animateThreadListHeight(lv_obj_get_height(_content) - navOverlapInContent());
+    }
   }
 
   void styleTabHeader(lv_obj_t* btns) {
@@ -176,7 +403,7 @@ private:
     lv_obj_set_style_border_width(btns, 0, 0);
     lv_obj_set_style_pad_column(btns, 18, 0);
 
-    lv_obj_set_style_text_font(btns, &lv_font_montserrat_16, LV_PART_ITEMS);
+    lv_obj_set_style_text_font(btns, &lv_font_montserrat_14, LV_PART_ITEMS);
     lv_obj_set_style_text_color(btns, lv_color_hex(0x8E9AAC), LV_PART_ITEMS);
     lv_obj_set_style_text_color(btns, lv_color_hex(0xE7F0FB), LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(btns, LV_OPA_TRANSP, LV_PART_ITEMS);
@@ -190,6 +417,8 @@ private:
     if (_bridge != nullptr) {
       _bridge->clearThreadFilter();
     }
+
+    WindowManager::instance().resetRightNavAction();
 
     clearContent();
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
@@ -274,7 +503,7 @@ private:
       lv_obj_set_style_border_width(row, 0, 0);
       lv_obj_set_style_pad_right(row, 34, 0);
       lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
-      lv_obj_set_style_text_font(row, &lv_font_montserrat_16, 0);
+      lv_obj_set_style_text_font(row, &lv_font_montserrat_14, 0);
 
       int unread = _bridge->getUnreadCount(channel.id, false);
       addUnreadBadge(row, unread);
@@ -320,7 +549,7 @@ private:
       lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
       lv_obj_set_style_border_width(row, 0, 0);
       lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
-      lv_obj_set_style_text_font(row, &lv_font_montserrat_16, 0);
+      lv_obj_set_style_text_font(row, &lv_font_montserrat_14, 0);
 
       if (contact.heardRecently) {
         lv_obj_set_style_border_color(row, lv_color_hex(0x27D468), 0);
@@ -340,27 +569,137 @@ private:
     }
   }
 
-  void appendThreadLine(const char* sender, const char* text, uint32_t ts) {
+  lv_obj_t* appendThreadBubble(const char* sender,
+                              const char* text,
+                              uint8_t hopCount,
+                              bool isMe,
+                              uint8_t timesHeard = 0) {
     if (_threadList == nullptr) {
+      return nullptr;
+    }
+
+    lv_obj_t* row = lv_obj_create(_threadList);
+    lv_obj_set_width(row, LV_PCT(100));
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(row,
+                          isMe ? LV_FLEX_ALIGN_END : LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_top(row, 4, 0);
+    lv_obj_set_style_pad_bottom(row, 4, 0);
+    lv_obj_set_style_pad_left(row, 6, 0);
+    lv_obj_set_style_pad_right(row, 6, 0);
+
+    if (!isMe) {
+      lv_obj_t* senderLbl = lv_label_create(row);
+      char senderText[96];
+      if (hopCount == 0) {
+        snprintf(senderText, sizeof(senderText), "%s  Direct", (sender && sender[0]) ? sender : "Unknown");
+      } else {
+        snprintf(senderText,
+                 sizeof(senderText),
+                 "%s  %u Hops",
+                 (sender && sender[0]) ? sender : "Unknown",
+                 static_cast<unsigned>(hopCount));
+      }
+      lv_label_set_text(senderLbl, senderText);
+      lv_obj_set_style_text_color(senderLbl, senderColor(sender), 0);
+      lv_obj_set_style_text_font(senderLbl, &lv_font_montserrat_12, 0);
+      lv_obj_set_style_pad_left(senderLbl, 2, 0);
+      lv_obj_set_style_pad_bottom(senderLbl, 2, 0);
+    }
+
+    lv_obj_t* bubble = lv_obj_create(row);
+    lv_obj_set_width(bubble, LV_PCT(86));
+    lv_obj_set_height(bubble, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(bubble, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(bubble, 2, 0);
+    lv_obj_set_style_radius(bubble, 14, 0);
+    lv_obj_set_style_border_width(bubble, 0, 0);
+    lv_obj_set_style_pad_left(bubble, 10, 0);
+    lv_obj_set_style_pad_right(bubble, 10, 0);
+    lv_obj_set_style_pad_top(bubble, 7, 0);
+    lv_obj_set_style_pad_bottom(bubble, 7, 0);
+
+    if (isMe) {
+      lv_obj_set_style_bg_color(bubble, lv_color_hex(0x2F6DF6), 0);
+    } else {
+      lv_obj_set_style_bg_color(bubble, lv_color_hex(0xE7EDF6), 0);
+    }
+
+    lv_obj_t* body = lv_label_create(bubble);
+    lv_label_set_text(body, (text && text[0]) ? text : "(empty)");
+    lv_obj_set_width(body, LV_PCT(100));
+    lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_color(body, isMe ? lv_color_hex(0xEFF4FF) : lv_color_hex(0x0E1622), 0);
+    lv_obj_set_style_text_font(body, &lv_font_montserrat_12, 0);
+
+    lv_obj_t* meta = nullptr;
+    if (isMe) {
+      meta = lv_label_create(row);
+      char metaText[40];
+      if (timesHeard > 0) {
+        snprintf(metaText, sizeof(metaText), "Heard %u Repeats", static_cast<unsigned>(timesHeard));
+      } else {
+        snprintf(metaText, sizeof(metaText), "Sent");
+      }
+      lv_label_set_text(meta, metaText);
+      lv_obj_set_style_text_color(meta, lv_color_hex(0x6D7B8E), 0);
+      lv_obj_set_style_text_font(meta, &lv_font_montserrat_10, 0);
+      lv_obj_set_style_pad_top(meta, 1, 0);
+      lv_obj_set_style_pad_left(meta, 3, 0);
+    }
+
+    lv_obj_update_layout(_threadList);
+    lv_obj_scroll_to_y(_threadList, LV_COORD_MAX, LV_ANIM_OFF);
+    return meta;
+  }
+
+  bool tryResolveEcho(const MeshMessage& msg) {
+    for (auto& pending : _pendingEchoes) {
+      if (pending.threadId != msg.threadId || pending.isPrivate != msg.isPrivate) {
+        continue;
+      }
+      if (pending.timestamp != msg.timestamp || pending.text != msg.text) {
+        continue;
+      }
+      if (pending.metaLabel == nullptr) {
+        return true;
+      }
+
+      pending.timesHeard = static_cast<uint8_t>(pending.timesHeard + 1);
+      char heardText[40];
+      snprintf(heardText, sizeof(heardText), "Heard %u Repeats", static_cast<unsigned>(pending.timesHeard));
+      lv_label_set_text(pending.metaLabel, heardText);
+      return true;
+    }
+    return false;
+  }
+
+  void sendCurrentInput() {
+    if (_bridge == nullptr || _input == nullptr) {
       return;
     }
 
-    char line[170];
-    snprintf(line, sizeof(line), "%s  [%s]\n%s",
-             (sender && sender[0]) ? sender : "Unknown",
-             relativeAge(ts),
-             (text && text[0]) ? text : "(empty)");
-    lv_list_add_text(_threadList, line);
-
-    lv_obj_t* last = lv_obj_get_child(_threadList, lv_obj_get_child_cnt(_threadList) - 1);
-    if (last != nullptr) {
-      lv_obj_set_style_text_color(last, lv_color_hex(0xEDF4FF), 0);
-      lv_obj_set_style_text_font(last, &lv_font_montserrat_16, 0);
-      lv_obj_scroll_to_view(last, LV_ANIM_OFF);
+    const char* txt = lv_textarea_get_text(_input);
+    if (txt == nullptr || txt[0] == '\0') {
+      return;
     }
+
+    const uint32_t ts = static_cast<uint32_t>(millis());
+    _bridge->enqueueOutboxText(_threadId, _threadPrivate, txt, ts);
+    MeshMessage localMsg = _bridge->recordLocalMessage(_threadId, _threadPrivate, "You", txt, ts);
+    lv_obj_t* meta = appendThreadBubble(localMsg.sender.c_str(), localMsg.text.c_str(), 0, true, localMsg.timesHeard);
+    _pendingEchoes.push_back({_threadId, _threadPrivate, ts, txt, localMsg.timesHeard, meta});
+    lv_textarea_set_text(_input, "");
+    hideComposer();
   }
 
   void backToLanding() {
+    hideKeyboard();
     buildLandingTabs();
   }
 
@@ -378,19 +717,70 @@ private:
     }
 
     clearContent();
-    lv_obj_clear_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(_title, isPrivate ? "Direct Chat" : "Channel Chat");
+    WindowManager::instance().setRightNavAction(LV_SYMBOL_EDIT " Write", [this]() { showComposer(); });
+
+    _composer = lv_obj_create(_content);
+    lv_obj_set_size(_composer, LV_PCT(100), 58);
+    lv_obj_align(_composer, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_radius(_composer, 0, 0);
+    lv_obj_set_style_bg_color(_composer, lv_color_hex(0x0F141B), 0);
+    lv_obj_set_style_border_width(_composer, 0, 0);
+    lv_obj_set_style_pad_all(_composer, 8, 0);
+    lv_obj_add_flag(_composer, LV_OBJ_FLAG_HIDDEN);
 
     _threadList = lv_list_create(_content);
     lv_obj_set_size(_threadList, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_height(_threadList, lv_obj_get_height(_content) - navOverlapInContent());
+    lv_obj_align(_threadList, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_color(_threadList, lv_color_hex(0x101820), 0);
     lv_obj_set_style_border_width(_threadList, 0, 0);
+
+    lv_obj_move_foreground(_composer);
+
+    _input = lv_textarea_create(_composer);
+    lv_obj_set_size(_input, LV_PCT(78), 46);
+    lv_obj_align(_input, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_textarea_set_placeholder_text(_input, "Type a message");
+    lv_textarea_set_one_line(_input, false);
+    lv_obj_set_style_bg_color(_input, lv_color_hex(0x1B2530), 0);
+    lv_obj_set_style_border_width(_input, 0, 0);
+    lv_obj_set_style_text_color(_input, lv_color_hex(0xEDF4FF), 0);
+    lv_obj_set_style_text_font(_input, &lv_font_montserrat_14, 0);
+    lv_obj_add_event_cb(_input, onInputFocused, LV_EVENT_FOCUSED, this);
+    lv_obj_add_event_cb(_input, onInputDefocused, LV_EVENT_DEFOCUSED, this);
+    lv_obj_add_event_cb(_input, onInputReady, LV_EVENT_READY, this);
+
+    _sendBtn = lv_btn_create(_composer);
+    lv_obj_set_size(_sendBtn, LV_PCT(20), 46);
+    lv_obj_align(_sendBtn, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_set_style_bg_color(_sendBtn, lv_color_hex(0x25D366), 0);
+    lv_obj_set_style_border_width(_sendBtn, 0, 0);
+    lv_obj_add_event_cb(_sendBtn, onSendClicked, LV_EVENT_CLICKED, this);
+    lv_obj_t* sendLbl = lv_label_create(_sendBtn);
+    lv_label_set_text(sendLbl, "Send");
+    lv_obj_set_style_text_color(sendLbl, lv_color_hex(0x06210E), 0);
+    lv_obj_set_style_text_font(sendLbl, &lv_font_montserrat_14, 0);
+    lv_obj_center(sendLbl);
 
     bool addedHistory = false;
     if (_bridge != nullptr) {
       auto history = _bridge->getThreadHistory(id, isPrivate);
       for (const auto& entry : history) {
-        appendThreadLine(entry.sender.c_str(), entry.text.c_str(), entry.timestamp);
+        lv_obj_t* meta = appendThreadBubble(entry.sender.c_str(),
+                                            entry.text.c_str(),
+                                            entry.hopCount,
+                                            entry.isLocal,
+                                            entry.timesHeard);
+        if (entry.isLocal) {
+          _pendingEchoes.push_back({entry.threadId,
+                                    entry.isPrivate,
+                                    entry.timestamp,
+                                    entry.text,
+                                    entry.timesHeard,
+                                    meta});
+        }
         addedHistory = true;
       }
     }
@@ -398,7 +788,7 @@ private:
     if (!addedHistory) {
       lv_obj_t* empty = lv_list_add_text(_threadList, "No messages yet");
       lv_obj_set_style_text_color(empty, lv_color_hex(0xDCE7F5), 0);
-      lv_obj_set_style_text_font(empty, &lv_font_montserrat_16, 0);
+      lv_obj_set_style_text_font(empty, &lv_font_montserrat_14, 0);
     }
   }
 
@@ -413,6 +803,9 @@ private:
   lv_obj_t* _channelsList;
   lv_obj_t* _contactsList;
   lv_obj_t* _threadList;
+  lv_obj_t* _composer;
+  lv_obj_t* _input;
+  lv_obj_t* _sendBtn;
 
   bool _inThread;
   uint32_t _threadId;
@@ -420,6 +813,7 @@ private:
   bool _contactsLoaded;
   uint32_t _lastRefresh;
   std::vector<RowBinding> _rowBindings;
+  std::vector<PendingEchoBubble> _pendingEchoes;
 };
 
 }  // namespace

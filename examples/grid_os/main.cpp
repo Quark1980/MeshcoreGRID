@@ -61,6 +61,45 @@ uint8_t touchSda = TOUCH_SDA;
 uint8_t touchScl = TOUCH_SCL;
 bool gBleEnabled = false;
 
+bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
+  if (item.isPrivate) {
+    const int total = the_mesh.getNumContacts();
+    for (int i = 0; i < total; ++i) {
+      ContactInfo contact;
+      if (!the_mesh.getContactByIdx(i, contact)) {
+        continue;
+      }
+
+      uint32_t contactId = 0;
+      memcpy(&contactId, contact.id.pub_key, sizeof(contactId));
+      if (contactId != item.threadId) {
+        continue;
+      }
+
+      uint32_t expectedAck = 0;
+      uint32_t estTimeout = 0;
+      return the_mesh.sendMessage(contact,
+                                  item.timestamp,
+                                  0,
+                                  item.text,
+                                  expectedAck,
+                                  estTimeout) != MSG_SEND_FAILED;
+    }
+    return false;
+  }
+
+  ChannelDetails channel;
+  if (!the_mesh.getChannel(static_cast<int>(item.threadId & 0xFFu), channel)) {
+    return false;
+  }
+
+  return the_mesh.sendGroupMessage(item.timestamp,
+                                   channel.channel,
+                                   the_mesh.getNodePrefs()->node_name,
+                                   item.text,
+                                   static_cast<int>(strnlen(item.text, sizeof(item.text))));
+}
+
 void lvglFlush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
   const uint32_t w = static_cast<uint32_t>(area->x2 - area->x1 + 1);
   const uint32_t h = static_cast<uint32_t>(area->y2 - area->y1 + 1);
@@ -424,10 +463,16 @@ void setup() {
 
 void loop() {
   static uint32_t lastRadioMetricsMs = 0;
+  MeshBridge& bridge = MeshBridge::instance();
 
   the_mesh.loop();
   sensors.loop();
   rtc_clock.tick();
+
+  MeshBridge::OutboxItem outItem{};
+  while (bridge.dequeueOutboxText(outItem, 0)) {
+    sendQueuedOutboxItem(outItem);
+  }
 
   lv_tick_inc(5);
   lv_timer_handler();
@@ -440,7 +485,7 @@ void loop() {
     const int8_t snr = static_cast<int8_t>(radio_driver.getLastSNR());
     grid::radio_telemetry::updateMetrics(rssi, snr, now);
     if (rssi < 0 && rssi > -200) {
-      MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS, nullptr, "radio", rssi, snr, now);
+      bridge.publishEvent(GRID_EVT_RADIO_STATS, nullptr, "radio", rssi, snr, now);
     }
   }
 

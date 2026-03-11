@@ -28,8 +28,11 @@ WindowManager::WindowManager()
   _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
   _statusBleLabel(nullptr),
       _navBar(nullptr),
+    _rightNavButton(nullptr),
+    _rightNavLabel(nullptr),
       _contentRoot(nullptr),
-      _activeScreen(nullptr) {}
+    _activeScreen(nullptr),
+    _rightNavHandler(nullptr) {}
 
 bool WindowManager::begin(MeshBridge& bridge, lv_obj_t* root) {
   _bridge = &bridge;
@@ -114,6 +117,26 @@ void WindowManager::goHome() {
   if (!_registry.empty()) {
     _appStack.clear();
     openApp(_registry.front().id, false);
+  }
+}
+
+void WindowManager::setRightNavAction(const char* label, std::function<void()> handler) {
+  _rightNavHandler = std::move(handler);
+  if (_rightNavLabel != nullptr) {
+    lv_label_set_text(_rightNavLabel, (label != nullptr && label[0] != '\0') ? label : "");
+  }
+  if (_rightNavButton != nullptr) {
+    lv_obj_clear_flag(_rightNavButton, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void WindowManager::resetRightNavAction() {
+  _rightNavHandler = [this]() { goHome(); };
+  if (_rightNavLabel != nullptr) {
+    lv_label_set_text(_rightNavLabel, LV_SYMBOL_HOME " Home");
+  }
+  if (_rightNavButton != nullptr) {
+    lv_obj_clear_flag(_rightNavButton, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -240,14 +263,14 @@ void WindowManager::buildNavigationBar() {
   lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
   lv_obj_center(backLabel);
 
-  lv_obj_t* home = lv_btn_create(_navBar);
-  lv_obj_add_style(home, &_styleButton, 0);
-  lv_obj_set_size(home, 96, 36);
-  lv_obj_align(home, LV_ALIGN_RIGHT_MID, -10, 0);
-  lv_obj_add_event_cb(home, onHomePressed, LV_EVENT_CLICKED, this);
-  lv_obj_t* homeLabel = lv_label_create(home);
-  lv_label_set_text(homeLabel, LV_SYMBOL_HOME " Home");
-  lv_obj_center(homeLabel);
+  _rightNavButton = lv_btn_create(_navBar);
+  lv_obj_add_style(_rightNavButton, &_styleButton, 0);
+  lv_obj_set_size(_rightNavButton, 96, 36);
+  lv_obj_align(_rightNavButton, LV_ALIGN_RIGHT_MID, -10, 0);
+  lv_obj_add_event_cb(_rightNavButton, onRightNavPressed, LV_EVENT_CLICKED, this);
+  _rightNavLabel = lv_label_create(_rightNavButton);
+  lv_obj_center(_rightNavLabel);
+  resetRightNavAction();
 }
 
 void WindowManager::createTheme() {
@@ -341,9 +364,9 @@ void WindowManager::onBackPressed(lv_event_t* e) {
   }
 }
 
-void WindowManager::onHomePressed(lv_event_t* e) {
+void WindowManager::onRightNavPressed(lv_event_t* e) {
   auto* self = static_cast<WindowManager*>(lv_event_get_user_data(e));
-  if (self) {
-    self->goHome();
+  if (self && self->_rightNavHandler) {
+    self->_rightNavHandler();
   }
 }

@@ -16,6 +16,7 @@ MeshBridge& MeshBridge::instance() {
 MeshBridge::MeshBridge()
     : _mesh(nullptr),
       _rxQueue(nullptr),
+  _txQueue(nullptr),
       _meshTask(nullptr),
       _uiTask(nullptr),
       _meshCfg{nullptr, nullptr},
@@ -49,6 +50,13 @@ bool MeshBridge::begin(mesh::Mesh* meshInstance,
     _rxQueue = xQueueCreate(queueDepth, sizeof(BridgeEvent));
   }
   if (_rxQueue == nullptr) {
+    return false;
+  }
+
+  if (_txQueue == nullptr) {
+    _txQueue = xQueueCreate(queueDepth, sizeof(OutboxItem));
+  }
+  if (_txQueue == nullptr) {
     return false;
   }
 
@@ -88,6 +96,10 @@ void MeshBridge::stop() {
     vQueueDelete(_rxQueue);
     _rxQueue = nullptr;
   }
+  if (_txQueue) {
+    vQueueDelete(_txQueue);
+    _txQueue = nullptr;
+  }
 }
 
 bool MeshBridge::sendTextFlood(const mesh::Identity& dest,
@@ -118,11 +130,54 @@ bool MeshBridge::sendTextFlood(const mesh::Identity& dest,
   return true;
 }
 
+bool MeshBridge::enqueueOutboxText(uint32_t threadId, bool isPrivate, const char* text, uint32_t timestamp) {
+  if (_txQueue == nullptr || text == nullptr || text[0] == '\0') {
+    return false;
+  }
+
+  OutboxItem item{};
+  item.threadId = threadId;
+  item.isPrivate = isPrivate;
+  item.timestamp = timestamp;
+  strncpy(item.text, text, sizeof(item.text) - 1);
+
+  return xQueueSend(_txQueue, &item, 0) == pdTRUE;
+}
+
+bool MeshBridge::dequeueOutboxText(OutboxItem& outItem, TickType_t timeoutTicks) {
+  if (_txQueue == nullptr) {
+    return false;
+  }
+  return xQueueReceive(_txQueue, &outItem, timeoutTicks) == pdTRUE;
+}
+
+MeshMessage MeshBridge::recordLocalMessage(uint32_t threadId,
+                                          bool isPrivate,
+                                          const char* sender,
+                                          const char* text,
+                                          uint32_t timestamp) {
+  MeshMessage msg{};
+  msg.packetType = isPrivate ? PAYLOAD_TYPE_TXT_MSG : PAYLOAD_TYPE_GRP_TXT;
+  msg.rssi = 0;
+  msg.snr = 0;
+  msg.hopCount = 0;
+  msg.timesHeard = 0;
+  msg.timestamp = timestamp;
+  msg.threadId = threadId;
+  msg.isPrivate = isPrivate;
+  msg.isLocal = true;
+  msg.sender = sender ? sender : "You";
+  msg.text = text ? text : "";
+  appendThreadHistory(msg);
+  return msg;
+}
+
 void MeshBridge::onPacketFromMeshCore(const mesh::Packet& pkt, int16_t rssi, int8_t snr) {
   BridgeEvent ev = {};
   ev.packetType = pkt.getPayloadType();
   ev.rssi = rssi;
   ev.snr = snr;
+  ev.hopCount = pkt.getPathHashCount();
 
   uint32_t ts = 0;
   std::string txt;
@@ -151,6 +206,7 @@ void MeshBridge::publishEvent(uint8_t eventType,
   ev.packetType = eventType;
   ev.rssi = rssi;
   ev.snr = snr;
+  ev.hopCount = 0;
   ev.timestamp = timestamp;
   ev.threadId = threadId;
   ev.isPrivate = isPrivate;
@@ -271,6 +327,14 @@ int MeshBridge::getUnreadCount(uint32_t id, bool isPrivate) const {
   return it->second;
 }
 
+int MeshBridge::getTotalUnreadCount() const {
+  int total = 0;
+  for (const auto& entry : _unreadCounts) {
+    total += entry.second;
+  }
+  return total;
+}
+
 void MeshBridge::clearUnread(uint32_t id, bool isPrivate) {
   const uint32_t key = makeThreadKey(id, isPrivate);
   _unreadCounts.erase(key);
@@ -298,9 +362,12 @@ bool MeshBridge::pollForUi(MeshMessage& outMsg, TickType_t timeoutTicks) {
   outMsg.packetType = ev.packetType;
   outMsg.rssi = ev.rssi;
   outMsg.snr = ev.snr;
+  outMsg.hopCount = ev.hopCount;
+  outMsg.timesHeard = 0;
   outMsg.timestamp = ev.timestamp;
   outMsg.threadId = ev.threadId;
   outMsg.isPrivate = ev.isPrivate;
+  outMsg.isLocal = false;
   outMsg.sender = ev.sender;
   outMsg.text = ev.text;
   return true;
@@ -311,23 +378,24 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
   uint32_t count = 0;
 
   while (count < maxMessagesPerTick && pollForUi(msg, 0)) {
+    bool mergedIntoLocal = false;
     _lastRssi = msg.rssi;
     _lastSnr = msg.snr;
     _hasRadioMetrics = true;
 
     if (isTextPacketType(msg.packetType)) {
-      appendThreadHistory(msg);
+      mergedIntoLocal = appendThreadHistory(msg, &msg);
     }
 
-    if (isTextPacketType(msg.packetType) && !_threadFilterEnabled) {
+    if (isTextPacketType(msg.packetType) && !msg.isLocal && !_threadFilterEnabled) {
       const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
       _unreadCounts[key]++;
-    } else if (isTextPacketType(msg.packetType) && !messageMatchesFilter(msg)) {
+    } else if (isTextPacketType(msg.packetType) && !msg.isLocal && !messageMatchesFilter(msg)) {
       const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
       _unreadCounts[key]++;
     }
 
-    if (_activeApp != nullptr && messageMatchesFilter(msg)) {
+    if (_activeApp != nullptr && (messageMatchesFilter(msg) || mergedIntoLocal)) {
       _activeApp->onMessageReceived(msg);
     }
 
@@ -363,12 +431,34 @@ bool MeshBridge::isTextPacketType(uint8_t packetType) const {
   return packetType == PAYLOAD_TYPE_TXT_MSG || packetType == PAYLOAD_TYPE_GRP_TXT;
 }
 
-void MeshBridge::appendThreadHistory(const MeshMessage& msg) {
+bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolvedMsg) {
   constexpr size_t kMaxPerThread = 24;
   constexpr size_t kMaxThreads = 16;
 
   const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
   auto& history = _threadHistory[key];
+
+  if (!msg.isLocal) {
+    for (auto& entry : history) {
+      if (!entry.isLocal) {
+        continue;
+      }
+      if (entry.timestamp != msg.timestamp || entry.text != msg.text) {
+        continue;
+      }
+
+      entry.timesHeard = static_cast<uint8_t>(entry.timesHeard + 1);
+      entry.hopCount = msg.hopCount;
+      entry.snr = msg.snr;
+      entry.rssi = msg.rssi;
+
+      if (resolvedMsg != nullptr) {
+        *resolvedMsg = entry;
+      }
+      return true;
+    }
+  }
+
   history.push_back(msg);
   if (history.size() > kMaxPerThread) {
     history.erase(history.begin(), history.begin() + (history.size() - kMaxPerThread));
@@ -385,6 +475,11 @@ void MeshBridge::appendThreadHistory(const MeshMessage& msg) {
     }
     _threadHistory.erase(oldest);
   }
+
+  if (resolvedMsg != nullptr) {
+    *resolvedMsg = history.back();
+  }
+  return false;
 }
 
 void MeshBridge::meshTaskTrampoline(void* ctx) {

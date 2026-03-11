@@ -32,6 +32,13 @@ public:
     bool heardRecently;
   };
 
+  struct OutboxItem {
+    uint32_t threadId;
+    bool isPrivate;
+    uint32_t timestamp;
+    char text[MAX_PACKET_PAYLOAD];
+  };
+
   using Observer = std::function<void(const MeshMessage&)>;
   using ChannelProvider = std::function<void(std::vector<ChannelSummary>&)>;
   using ContactProvider = std::function<void(std::vector<ContactSummary>&)>;
@@ -53,6 +60,9 @@ public:
   void stop();
 
   bool sendTextFlood(const mesh::Identity& dest, const uint8_t* secret, const char* text, uint32_t senderTimestamp);
+  bool enqueueOutboxText(uint32_t threadId, bool isPrivate, const char* text, uint32_t timestamp);
+  bool dequeueOutboxText(OutboxItem& outItem, TickType_t timeoutTicks = 0);
+  MeshMessage recordLocalMessage(uint32_t threadId, bool isPrivate, const char* sender, const char* text, uint32_t timestamp);
 
   void onPacketFromMeshCore(const mesh::Packet& pkt, int16_t rssi, int8_t snr);
   void publishEvent(uint8_t eventType,
@@ -82,6 +92,7 @@ public:
   bool isCurrentThread(uint32_t id, bool isPrivate) const;
 
   int getUnreadCount(uint32_t id, bool isPrivate) const;
+  int getTotalUnreadCount() const;
   void clearUnread(uint32_t id, bool isPrivate);
   std::vector<MeshMessage> getThreadHistory(uint32_t id, bool isPrivate) const;
 
@@ -94,12 +105,14 @@ public:
   void setActiveApp(class MeshApp* app);
 
   QueueHandle_t rxQueue() const { return _rxQueue; }
+  QueueHandle_t txQueue() const { return _txQueue; }
 
 private:
   struct BridgeEvent {
     uint8_t packetType;
     int16_t rssi;
     int8_t snr;
+    uint8_t hopCount;
     uint32_t timestamp;
     uint32_t threadId;
     bool isPrivate;
@@ -116,10 +129,11 @@ private:
   static uint32_t makeThreadKey(uint32_t id, bool isPrivate);
   bool messageMatchesFilter(const MeshMessage& msg) const;
   bool isTextPacketType(uint8_t packetType) const;
-  void appendThreadHistory(const MeshMessage& msg);
+  bool appendThreadHistory(const MeshMessage& msg, MeshMessage* resolvedMsg = nullptr);
 
   mesh::Mesh* _mesh;
   QueueHandle_t _rxQueue;
+  QueueHandle_t _txQueue;
   TaskHandle_t _meshTask;
   TaskHandle_t _uiTask;
 

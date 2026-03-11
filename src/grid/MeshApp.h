@@ -9,9 +9,12 @@ struct MeshMessage {
   uint8_t packetType;
   int16_t rssi;
   int8_t snr;
+  uint8_t hopCount;
+  uint8_t timesHeard;
   uint32_t timestamp;
   uint32_t threadId;
   bool isPrivate;
+  bool isLocal;
   std::string sender;
   std::string text;
 };

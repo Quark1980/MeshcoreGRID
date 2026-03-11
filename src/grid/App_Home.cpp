@@ -1,12 +1,14 @@
 #include "WindowManager.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace {
 
 class HomeApp : public MeshApp {
 public:
-  explicit HomeApp(WindowManager* wm) : _wm(wm), _layout(nullptr) {}
+  explicit HomeApp(WindowManager* wm)
+      : _wm(wm), _layout(nullptr), _chatBadge(nullptr), _chatBadgeLabel(nullptr) {}
 
   void release() override {
     this->~HomeApp();
@@ -63,6 +65,11 @@ public:
       lv_obj_set_style_text_font(name, &lv_font_montserrat_14, 0);
       lv_obj_align(name, LV_ALIGN_CENTER, 0, 18);
 
+      if (strcmp(apps[i].id, "chat") == 0) {
+        createChatBadge(card);
+        updateChatBadge();
+      }
+
       lv_obj_add_event_cb(card, [](lv_event_t* e) {
         const char* id = static_cast<const char*>(lv_event_get_user_data(e));
         if (id) {
@@ -73,10 +80,12 @@ public:
     }
   }
 
-  void onLoop() override {}
+  void onLoop() override { updateChatBadge(); }
 
   void onClose() override {
     _layout = nullptr;
+    _chatBadge = nullptr;
+    _chatBadgeLabel = nullptr;
   }
 
   void onMessageReceived(MeshMessage msg) override {
@@ -84,8 +93,44 @@ public:
   }
 
 private:
+  void createChatBadge(lv_obj_t* card) {
+    _chatBadge = lv_obj_create(card);
+    lv_obj_set_size(_chatBadge, 20, 20);
+    lv_obj_align(_chatBadge, LV_ALIGN_TOP_RIGHT, -8, 8);
+    lv_obj_set_style_radius(_chatBadge, 10, 0);
+    lv_obj_set_style_bg_color(_chatBadge, lv_color_hex(0xE64A5F), 0);
+    lv_obj_set_style_border_width(_chatBadge, 0, 0);
+    lv_obj_clear_flag(_chatBadge, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(_chatBadge, LV_OBJ_FLAG_HIDDEN);
+
+    _chatBadgeLabel = lv_label_create(_chatBadge);
+    lv_obj_set_style_text_font(_chatBadgeLabel, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(_chatBadgeLabel, lv_color_white(), 0);
+    lv_obj_center(_chatBadgeLabel);
+  }
+
+  void updateChatBadge() {
+    if (_chatBadge == nullptr || _chatBadgeLabel == nullptr) {
+      return;
+    }
+
+    const int unreadCount = MeshBridge::instance().getTotalUnreadCount();
+    if (unreadCount <= 0) {
+      lv_obj_add_flag(_chatBadge, LV_OBJ_FLAG_HIDDEN);
+      return;
+    }
+
+    const int clamped = std::min(unreadCount, 99);
+    char text[4];
+    snprintf(text, sizeof(text), "%d", clamped);
+    lv_label_set_text(_chatBadgeLabel, text);
+    lv_obj_clear_flag(_chatBadge, LV_OBJ_FLAG_HIDDEN);
+  }
+
   WindowManager* _wm;
   lv_obj_t* _layout;
+  lv_obj_t* _chatBadge;
+  lv_obj_t* _chatBadgeLabel;
 };
 
 }  // namespace

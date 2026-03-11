@@ -33,6 +33,8 @@ public:
   bool openApp(const char* appId, bool pushToStack = true);
   void goBack();
   void goHome();
+  void setRightNavAction(const char* label, std::function<void()> handler);
+  void resetRightNavAction();
 
   lv_obj_t* contentRoot() const { return _contentRoot; }
 
@@ -59,7 +61,7 @@ private:
   void destroyCurrentApp();
 
   static void onBackPressed(lv_event_t* e);
-  static void onHomePressed(lv_event_t* e);
+  static void onRightNavPressed(lv_event_t* e);
 
   MeshBridge* _bridge;
   std::vector<AppDescriptor> _registry;
@@ -74,8 +76,11 @@ private:
   lv_obj_t* _statusSignalBars[4];
   lv_obj_t* _statusBleLabel;
   lv_obj_t* _navBar;
+  lv_obj_t* _rightNavButton;
+  lv_obj_t* _rightNavLabel;
   lv_obj_t* _contentRoot;
   lv_obj_t* _activeScreen;
+  std::function<void()> _rightNavHandler;
 
   lv_style_t _styleShell;
   lv_style_t _styleCard;

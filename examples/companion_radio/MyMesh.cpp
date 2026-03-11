@@ -578,6 +578,24 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
                                   const char *text) {
   uint8_t channel_idx = findChannelIdx(channel);
 #if GRID_OS_BOOT
+  const char* senderName = "Unknown";
+  const char* bodyText = text;
+  char senderBuf[24] = {0};
+
+  if (text != nullptr) {
+    const char* sep = strstr(text, ": ");
+    if (sep != nullptr) {
+      const size_t senderLen = static_cast<size_t>(sep - text);
+      if (senderLen > 0) {
+        const size_t copyLen = std::min(senderLen, sizeof(senderBuf) - 1);
+        memcpy(senderBuf, text, copyLen);
+        senderBuf[copyLen] = 0;
+        senderName = senderBuf;
+        bodyText = sep + 2;
+      }
+    }
+  }
+
   if (pkt && pkt->payload_len > 0) {
     grid::radio_telemetry::recordRawPacket(getRTCClock()->getCurrentTime(),
                                            static_cast<int16_t>(_radio->getLastRSSI()),
@@ -586,8 +604,8 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
                                            pkt->payload_len);
   }
   MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT,
-                                      text,
-                                      "#channel",
+                                      bodyText,
+                                      senderName,
                                       0,
                                       static_cast<int8_t>(pkt->getSNR()),
                                       timestamp,
