@@ -342,16 +342,22 @@ private:
     gKeyboardTarget = input;
     lv_keyboard_set_textarea(gKeyboard, input);
     lv_obj_clear_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_align(gKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    // On the first show, keyboard coordinates may be stale until a layout pass.
+    lv_obj_update_layout(lv_layer_top());
+    lv_obj_update_layout(_content);
 
     const int32_t obstruction = bottomObstructionInContent();
 
     if (_composer != nullptr) {
       lv_obj_move_foreground(_composer);
       lv_obj_align(_composer, LV_ALIGN_BOTTOM_MID, 0, -obstruction);
+      lv_obj_update_layout(_composer);
     }
 
     const int32_t composerH = (_composer != nullptr) ? lv_obj_get_height(_composer) : 0;
-    const int32_t target = lv_obj_get_height(_content) - composerH - obstruction;
+    const int32_t target = std::max<int32_t>(56, lv_obj_get_height(_content) - composerH - obstruction);
     animateThreadListHeight(target);
   }
 
@@ -383,9 +389,11 @@ private:
     }
 
     lv_obj_clear_flag(_composer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(_content);
     lv_obj_update_layout(_composer);
     lv_obj_move_foreground(_composer);
     lv_textarea_set_text(_input, "");
+    lv_obj_add_state(_input, LV_STATE_FOCUSED);
     showKeyboardForInput(_input);
   }
 
@@ -745,7 +753,6 @@ private:
     lv_obj_set_style_bg_color(_composer, lv_color_hex(0x0F141B), 0);
     lv_obj_set_style_border_width(_composer, 0, 0);
     lv_obj_set_style_pad_all(_composer, 8, 0);
-    lv_obj_add_flag(_composer, LV_OBJ_FLAG_HIDDEN);
 
     _threadList = lv_list_create(_content);
     lv_obj_set_size(_threadList, LV_PCT(100), LV_PCT(100));
@@ -780,6 +787,10 @@ private:
     lv_obj_set_style_text_color(sendLbl, lv_color_hex(0x06210E), 0);
     lv_obj_set_style_text_font(sendLbl, &lv_font_montserrat_14, 0);
     lv_obj_center(sendLbl);
+
+    // Let LVGL calculate child geometry once before the composer is hidden.
+    lv_obj_update_layout(_composer);
+    lv_obj_add_flag(_composer, LV_OBJ_FLAG_HIDDEN);
 
     bool addedHistory = false;
     if (_bridge != nullptr) {
