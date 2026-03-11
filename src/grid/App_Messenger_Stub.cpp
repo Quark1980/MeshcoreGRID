@@ -238,6 +238,7 @@ private:
     lv_obj_set_style_pad_left(_content, 0, 0);
     lv_obj_set_style_pad_right(_content, 0, 0);
     lv_obj_set_style_pad_bottom(_content, 0, 0);
+    lv_obj_clear_flag(_content, LV_OBJ_FLAG_SCROLLABLE);
   }
 
   void clearContent() {
@@ -382,6 +383,7 @@ private:
     }
 
     lv_obj_clear_flag(_composer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(_composer);
     lv_obj_move_foreground(_composer);
     lv_textarea_set_text(_input, "");
     showKeyboardForInput(_input);
@@ -491,17 +493,28 @@ private:
 
     constexpr size_t kMaxRows = 64;
     size_t shown = 0;
+    size_t skipped = 0;
     for (const auto& channel : channels) {
       if (shown >= kMaxRows) {
         break;
+      }
+      if (channel.name.empty()) {
+        skipped++;
+        continue;
       }
       char label[48];
       snprintf(label, sizeof(label), "%s", channel.name.c_str());
 
       lv_obj_t* row = lv_list_add_btn(_channelsList, LV_SYMBOL_LIST, label);
       lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
-      lv_obj_set_style_border_width(row, 0, 0);
+      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+      lv_obj_set_style_radius(row, 12, 0);
+      lv_obj_set_style_border_width(row, 1, 0);
+      lv_obj_set_style_border_color(row, lv_color_hex(0x263040), 0);
+      lv_obj_set_style_pad_left(row, 12, 0);
       lv_obj_set_style_pad_right(row, 34, 0);
+      lv_obj_set_style_pad_top(row, 10, 0);
+      lv_obj_set_style_pad_bottom(row, 10, 0);
       lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
       lv_obj_set_style_text_font(row, &lv_font_montserrat_14, 0);
 
@@ -513,9 +526,12 @@ private:
       shown++;
     }
 
-    if (channels.size() > kMaxRows) {
+    if (shown == 0) {
+      lv_obj_t* t = lv_list_add_text(_channelsList, "No populated channels");
+      lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
+    } else if (channels.size() - skipped > kMaxRows) {
       char more[48];
-      snprintf(more, sizeof(more), "+ %u more channels", static_cast<unsigned>(channels.size() - kMaxRows));
+      snprintf(more, sizeof(more), "+ %u more channels", static_cast<unsigned>(channels.size() - skipped - kMaxRows));
       lv_obj_t* t = lv_list_add_text(_channelsList, more);
       lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
     }
@@ -717,6 +733,7 @@ private:
     }
 
     clearContent();
+    lv_obj_update_layout(_content);
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(_title, isPrivate ? "Direct Chat" : "Channel Chat");
     WindowManager::instance().setRightNavAction(LV_SYMBOL_EDIT " Write", [this]() { showComposer(); });

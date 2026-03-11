@@ -417,7 +417,13 @@ public:
     lv_obj_t* slLbl = lv_label_create(sleep);
     lv_label_set_text(slLbl, "Hibernate");
     lv_obj_center(slLbl);
-    lv_obj_add_event_cb(sleep, [](lv_event_t*) { board.powerOff(); }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(sleep, [](lv_event_t*) {
+#ifdef DISPLAY_CLASS
+      display.turnOff();
+#endif
+      radio_driver.powerOff();
+      board.powerOff();
+    }, LV_EVENT_CLICKED, nullptr);
   }
   void onLoop() override { refreshBattery(); }
   void onClose() override { _batt = nullptr; }

@@ -60,6 +60,11 @@ uint8_t touchAddr = FT6336U_ADDR;
 uint8_t touchSda = TOUCH_SDA;
 uint8_t touchScl = TOUCH_SCL;
 bool gBleEnabled = false;
+volatile bool touchIrqPending = false;
+
+void IRAM_ATTR onTouchIrq() {
+  touchIrqPending = true;
+}
 
 bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
   if (item.isPrivate) {
@@ -115,6 +120,10 @@ bool readTouchPoint(int16_t* x, int16_t* y) {
     return false;
   }
 
+  if (!touchIrqPending && digitalRead(TOUCH_INT) != LOW) {
+    return false;
+  }
+
   static uint32_t touchErrLogGate = 0;
 
   auto logTouchError = [&](const char* reason) {
@@ -145,6 +154,9 @@ bool readTouchPoint(int16_t* x, int16_t* y) {
   uint8_t y_low = touchWire.read();
 
   if (touches == 0 || x == nullptr || y == nullptr) {
+    if (digitalRead(TOUCH_INT) == HIGH) {
+      touchIrqPending = false;
+    }
     return false;
   }
 
@@ -169,6 +181,11 @@ bool readTouchPoint(int16_t* x, int16_t* y) {
 
   *x = tx;
   *y = ty;
+
+  if (digitalRead(TOUCH_INT) == HIGH) {
+    touchIrqPending = false;
+  }
+
   return true;
 }
 
@@ -300,10 +317,13 @@ void setup() {
   digitalWrite(TOUCH_RST, HIGH);
   delay(50);
   pinMode(TOUCH_INT, INPUT);
+  touchIrqPending = false;
   touchReady = probeTouchOnBus(TOUCH_SDA, TOUCH_SCL) || probeTouchOnBus(4, 3);
   if (touchReady) {
+    attachInterrupt(digitalPinToInterrupt(TOUCH_INT), onTouchIrq, FALLING);
     Serial.printf("Touch detected at 0x%02X on SDA=%u SCL=%u\n", touchAddr, touchSda, touchScl);
   } else {
+    detachInterrupt(digitalPinToInterrupt(TOUCH_INT));
     Serial.println("WARN: No supported touch controller detected");
   }
 
