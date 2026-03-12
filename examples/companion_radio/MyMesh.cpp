@@ -548,14 +548,17 @@ void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t 
   } else {
     snprintf(senderName, sizeof(senderName), "%02X%02X%02X%02X", from.id.pub_key[0], from.id.pub_key[1], from.id.pub_key[2], from.id.pub_key[3]);
   }
+  // Match BLE companion semantics: direct is encoded as 0xFF, flood uses raw path_len byte.
+  uint8_t hopCount = (pkt && pkt->isRouteFlood()) ? pkt->path_len : 0xFF;
   MeshBridge::instance().publishEvent(PAYLOAD_TYPE_TXT_MSG,
                                       text,
                                       senderName,
                                       0,
-                                      static_cast<int8_t>(pkt->getSNR()),
+                                      pkt ? static_cast<int8_t>(pkt->getSNR()) : 0,
                                       sender_timestamp,
                                       pubKeyPrefixToU32(from.id.pub_key),
-                                      true);
+                                      true,
+                                      hopCount);
 #endif
   queueMessage(from, TXT_TYPE_PLAIN, pkt, sender_timestamp, NULL, 0, text);
 }
@@ -603,14 +606,17 @@ void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packe
                                            pkt->payload,
                                            pkt->payload_len);
   }
+  // Match BLE companion semantics: direct is encoded as 0xFF, flood uses raw path_len byte.
+  uint8_t hopCount = (pkt && pkt->isRouteFlood()) ? pkt->path_len : 0xFF;
   MeshBridge::instance().publishEvent(PAYLOAD_TYPE_GRP_TXT,
                                       bodyText,
                                       senderName,
                                       0,
-                                      static_cast<int8_t>(pkt->getSNR()),
+                                      pkt ? static_cast<int8_t>(pkt->getSNR()) : 0,
                                       timestamp,
                                       channel_idx,
-                                      false);
+                                      false,
+                                      hopCount);
 #endif
   int i = 0;
   if (app_target_ver >= 3) {

@@ -200,7 +200,8 @@ void MeshBridge::publishEvent(uint8_t eventType,
                               int8_t snr,
                               uint32_t timestamp,
                               uint32_t threadId,
-                              bool isPrivate) {
+                              bool isPrivate,
+                              uint8_t hopCount) {
   if (_rxQueue == nullptr) {
     return;
   }
@@ -209,7 +210,7 @@ void MeshBridge::publishEvent(uint8_t eventType,
   ev.packetType = eventType;
   ev.rssi = rssi;
   ev.snr = snr;
-  ev.hopCount = 0;
+  ev.hopCount = hopCount;
   ev.timestamp = timestamp;
   ev.threadId = threadId;
   ev.isPrivate = isPrivate;
@@ -467,11 +468,8 @@ bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolv
   constexpr size_t kMaxThreads = 16;
   constexpr uint32_t kEchoTimestampToleranceMs = 5000;
 
-  const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
-  auto& history = _threadHistory[key];
-
-  if (!msg.isLocal) {
-    for (auto it = history.rbegin(); it != history.rend(); ++it) {
+  auto tryMergeEcho = [&](std::vector<MeshMessage>& targetHistory, bool allowLatestFallback) -> bool {
+    for (auto it = targetHistory.rbegin(); it != targetHistory.rend(); ++it) {
       auto& entry = *it;
       if (!entry.isLocal) {
         continue;
@@ -484,7 +482,7 @@ bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolv
       const uint32_t tsB = msg.timestamp;
       const uint32_t diff = (tsA > tsB) ? (tsA - tsB) : (tsB - tsA);
       const bool timestampClose = (tsA == tsB) || (diff <= kEchoTimestampToleranceMs);
-      const bool fallbackToLatestSameText = (it == history.rbegin() && entry.timesHeard == 0);
+      const bool fallbackToLatestSameText = allowLatestFallback && (it == targetHistory.rbegin() && entry.timesHeard == 0);
       if (!timestampClose && !fallbackToLatestSameText) {
         continue;
       }
@@ -498,6 +496,27 @@ bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolv
         *resolvedMsg = entry;
       }
       return true;
+    }
+    return false;
+  };
+
+  const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
+  auto& history = _threadHistory[key];
+
+  if (!msg.isLocal) {
+    // Prefer merge within the same thread first.
+    if (tryMergeEcho(history, true)) {
+      return true;
+    }
+
+    // Fallback: some echoed frames can surface with different thread metadata.
+    for (auto& bucket : _threadHistory) {
+      if (bucket.first == key) {
+        continue;
+      }
+      if (tryMergeEcho(bucket.second, false)) {
+        return true;
+      }
     }
   }
 

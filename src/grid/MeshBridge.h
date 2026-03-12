@@ -87,7 +87,8 @@ public:
                     int8_t snr = 0,
                     uint32_t timestamp = 0,
                     uint32_t threadId = 0,
-                    bool isPrivate = false);
+                    bool isPrivate = false,
+                    uint8_t hopCount = 0);
 
   void setChannelProvider(ChannelProvider provider);
   void setContactProvider(ContactProvider provider);

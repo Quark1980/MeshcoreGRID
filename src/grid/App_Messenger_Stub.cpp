@@ -893,11 +893,13 @@ private:
       // Mesh confirmation for received messages: show hop count
       lv_obj_t* metaHops = lv_label_create(row);
       char hopsText[32];
-      if (hopCount == 0) {
+      const bool isDirect = (hopCount == 0xFF);
+      const uint8_t hops = static_cast<uint8_t>(hopCount & 0x3F);
+      if (isDirect) {
         snprintf(hopsText, sizeof(hopsText), "~ Direct");
         lv_obj_set_style_text_color(metaHops, lv_color_hex(0x00D084), 0);  // Green = zero hops
       } else {
-        snprintf(hopsText, sizeof(hopsText), "~ %u Hops", static_cast<unsigned>(hopCount));
+        snprintf(hopsText, sizeof(hopsText), "~ %u Hops", static_cast<unsigned>(hops));
         lv_obj_set_style_text_color(metaHops, lv_color_hex(0x6D7B8E), 0);  // Grey = via repeater
       }
       lv_label_set_text(metaHops, hopsText);
