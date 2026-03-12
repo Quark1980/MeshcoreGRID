@@ -28,6 +28,15 @@ Current implemented direction includes:
 - Compact message bubble layout with sender and hop metadata
 - Echo merge support for locally-sent messages with heard/repeat tracking
 - Integration with the existing MeshCore transport and companion-radio flow
+- Battery ADC reading (GPIO37 conflict with TFT MISO resolved; MISO disabled as display is write-only)
+- Permanent wake toast for "RX while screen off" packet counts, shown above the bottom navigation bar
+- Contacts screen shows name (left) and last-heard clock time (right) per row with guaranteed no overlap
+- Long-press any contact to view full advert metadata: public key, type, flags, path length, GPS position, advert and sync timestamps
+- Sort contacts by **Recent** (last heard, newest first) or **Name** (alphabetical), accessible from the right-nav action
+- Channel list automatically hides unnamed placeholder entries that normalise to the bare word "channel"
+- Nodes screen lists only adverts heard during the current boot session
+- Radio screen includes manual **Advert Zero-Hop** and **Advert Flood** actions
+- BLE screen shows the active generated PIN, BLE enabled state, and live connection state
 
 This is not a brand new protocol or a separate mesh implementation. It is MeshCore with an added GUI layer and screen workflow.
 
@@ -72,9 +81,79 @@ Current relevant target:
 
 Related groundwork and status:
 
-- Heltec V4 TFT touch hardware support is confirmed using FT6336 (`0x38`) on SDA=5, SCL=6, INT=7, RST=41.
+- Heltec V4 TFT touch hardware support is confirmed using FT6336 (`0x38`) on SDA=5, SCL=6, RST=41.
+- Touch now runs in polling mode on this target to avoid the Heltec V4 GPIO7 conflict with LoRa PA power.
 - The TFT display path and touch plumbing are integrated for GUI operation.
 - GRID is the name of the touch GUI project for MeshcoreGRID.
+
+## GRID Screens And Functions
+
+The current GRID firmware is an app-drawer based handheld UI with a fixed status bar at the top and a fixed navigation bar at the bottom.
+
+### Shared UI behavior
+
+- Top status bar shows clock, live radio signal bars with SNR text, BLE icon when BLE is enabled, and battery percentage.
+- Bottom navigation bar provides a left **Back** action and a right context action, which defaults to **Home**.
+- Buttons use amber pressed-state feedback for clearer touch confirmation.
+- Screen timeout is configurable in Settings. When the display wakes after sleep, GRID can show a toast above the navbar reporting how many packets were received while the screen was off.
+- LoRa receive stays active while the display is asleep on the Heltec V4 TFT build.
+
+### Home / App Drawer
+
+- Main launcher screen for all GRID apps.
+- Shows app cards for Messenger, Nodes, Radio, BLE, Settings, and Power.
+- Displays a live unread badge on the Messenger card when unread chat exists.
+
+### Messenger
+
+- Main chat application for channels and direct messages.
+- Channels tab lists available named channels and opens a thread view for channel chat.
+- Contacts tab lists known contacts with left-aligned names and right-aligned last-heard time.
+- Contact sorting toggles between **Recent** and **Name** using the right-nav **Sort** action.
+- Long-press on a contact opens a details popup with advert metadata including public key, flags, GPS position, timestamps, and unread count.
+- Thread view supports incoming and outgoing bubbles, sender labels, hop metadata, local echo merge, and a composer with on-screen keyboard.
+
+### Nodes
+
+- Shows only node adverts heard during the current boot session.
+- Does not mirror the persisted contact store.
+- Useful for checking live node discovery activity after boot or after sending adverts.
+
+### Radio
+
+- Starts on the **Advert** tab.
+- **Advert** tab provides two manual advert actions:
+   - **Advert Zero-Hop** sends the node advert only to neighbor nodes.
+   - **Advert Flood** sends the node advert using flood routing across the mesh.
+- **Metrics** tab shows live radio and runtime values in one screen, including frequency, bandwidth, spreading factor, coding rate, TX power, airtime factor, duty limit, RSSI, SNR, packet count, last raw packet timestamp, RX call count, dispatcher raw-hit count, and received flood/direct counters.
+
+### BLE
+
+- Shows whether companion BLE is enabled.
+- Shows the active BLE PIN currently generated from node settings.
+- Shows live connection state as connected or disconnected.
+- Provides a single button to turn BLE on or off.
+
+### Settings
+
+- Editable runtime and node settings screen.
+- Current fields exposed in GRID:
+   - Node Name
+   - Frequency (MHz)
+   - Bandwidth (kHz)
+   - Spreading Factor
+   - Coding Rate
+   - TX Power (dBm)
+   - BLE Pin
+   - Screen Timeout (seconds, `0` for manual-only sleep)
+- Uses an on-screen editor panel and keyboard for field updates.
+- Radio parameter changes are applied immediately and preferences are persisted.
+
+### Power
+
+- Shows battery voltage in millivolts.
+- **Reboot** restarts the board.
+- **Hibernate** turns off display/radio related hardware and enters deep sleep.
 
 ## How To Get Started
 

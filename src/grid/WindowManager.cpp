@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "target.h"
+
 namespace {
 constexpr int kStatusHeight = 32;
 constexpr int kNavHeight = 52;
@@ -27,12 +29,14 @@ WindowManager::WindowManager()
   _statusSignalLabel(nullptr),
   _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
   _statusBleLabel(nullptr),
+  _statusBatteryLabel(nullptr),
       _navBar(nullptr),
     _rightNavButton(nullptr),
     _rightNavLabel(nullptr),
       _contentRoot(nullptr),
     _activeScreen(nullptr),
-    _rightNavHandler(nullptr) {}
+    _rightNavHandler(nullptr),
+    _lastBatteryUpdateMs(0) {}
 
 bool WindowManager::begin(MeshBridge& bridge, lv_obj_t* root) {
   _bridge = &bridge;
@@ -49,6 +53,23 @@ void WindowManager::tick() {
   if (_activeApp) {
     _activeApp->onLoop();
   }
+
+  const uint32_t now = millis();
+  if (_statusBatteryLabel != nullptr && (now - _lastBatteryUpdateMs) >= 5000) {
+    _lastBatteryUpdateMs = now;
+    const uint16_t battMv = board.getBattMilliVolts();
+    int percent = static_cast<int>((static_cast<int32_t>(battMv) - 3300) * 100 / (4200 - 3300));
+    if (percent < 0) {
+      percent = 0;
+    } else if (percent > 100) {
+      percent = 100;
+    }
+
+    char battText[8];
+    snprintf(battText, sizeof(battText), "%d%%", percent);
+    lv_label_set_text(_statusBatteryLabel, battText);
+  }
+
   if (_bridge) {
     _bridge->refreshRadioMetrics();
     _bridge->dispatchForUi();
@@ -200,10 +221,10 @@ void WindowManager::buildStatusBar() {
   lv_obj_set_style_text_color(_statusBleLabel, lv_color_hex(COLOR_ACCENT), 0);
   lv_obj_add_flag(_statusBleLabel, LV_OBJ_FLAG_HIDDEN);
 
-  lv_obj_t* batt = lv_label_create(_statusBar);
-  lv_label_set_text(batt, "84%");
-  lv_obj_align(batt, LV_ALIGN_RIGHT_MID, -12, 0);
-  lv_obj_set_style_text_color(batt, lv_color_hex(COLOR_TEXT), 0);
+  _statusBatteryLabel = lv_label_create(_statusBar);
+  lv_label_set_text(_statusBatteryLabel, "--%");
+  lv_obj_align(_statusBatteryLabel, LV_ALIGN_RIGHT_MID, -12, 0);
+  lv_obj_set_style_text_color(_statusBatteryLabel, lv_color_hex(COLOR_TEXT), 0);
 }
 
 void WindowManager::updateStatusSignal() {
@@ -256,6 +277,7 @@ void WindowManager::updateStatusSignal() {
 void WindowManager::buildNavigationBar() {
   lv_obj_t* back = lv_btn_create(_navBar);
   lv_obj_add_style(back, &_styleButton, 0);
+  lv_obj_set_style_bg_color(back, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
   lv_obj_set_size(back, 96, 36);
   lv_obj_align(back, LV_ALIGN_LEFT_MID, 10, 0);
   lv_obj_add_event_cb(back, onBackPressed, LV_EVENT_CLICKED, this);
@@ -265,6 +287,7 @@ void WindowManager::buildNavigationBar() {
 
   _rightNavButton = lv_btn_create(_navBar);
   lv_obj_add_style(_rightNavButton, &_styleButton, 0);
+  lv_obj_set_style_bg_color(_rightNavButton, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
   lv_obj_set_size(_rightNavButton, 96, 36);
   lv_obj_align(_rightNavButton, LV_ALIGN_RIGHT_MID, -10, 0);
   lv_obj_add_event_cb(_rightNavButton, onRightNavPressed, LV_EVENT_CLICKED, this);

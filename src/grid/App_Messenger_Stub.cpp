@@ -280,16 +280,12 @@ private:
 
     uint16_t tab = lv_tabview_get_tab_act(self->_tabview);
     if (tab == 1) {
-      if (self->_contactSortBtn != nullptr) {
-        lv_obj_clear_flag(self->_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
-      }
       WindowManager::instance().setRightNavAction(LV_SYMBOL_SETTINGS " Sort", [self]() { self->toggleContactSort(); });
       if (!self->_contactsLoaded) {
         self->refreshContactList();
         self->_contactsLoaded = true;
       }
-    } else if (self->_contactSortBtn != nullptr) {
-      lv_obj_add_flag(self->_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
+    } else {
       WindowManager::instance().resetRightNavAction();
     }
   }
@@ -371,6 +367,13 @@ private:
     lv_obj_t* msg = lv_msgbox_create(nullptr, "Contact details", details, buttons, true);
     lv_obj_set_width(msg, LV_PCT(88));
     lv_obj_center(msg);
+    lv_obj_t* btns = lv_msgbox_get_btns(msg);
+    if (btns != nullptr) {
+      lv_obj_add_event_cb(btns, [](lv_event_t* e) {
+        lv_obj_t* mb = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+        lv_msgbox_close(mb);
+      }, LV_EVENT_VALUE_CHANGED, msg);
+    }
   }
 
   void buildShell() {
@@ -386,23 +389,13 @@ private:
     lv_obj_set_size(_backBtn, 74, 30);
     lv_obj_align(_backBtn, LV_ALIGN_LEFT_MID, 4, 0);
     lv_obj_set_style_bg_color(_backBtn, lv_color_hex(0x1B2530), 0);
+    lv_obj_set_style_bg_color(_backBtn, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
     lv_obj_add_event_cb(_backBtn, onBackToTabs, LV_EVENT_CLICKED, this);
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_t* backLabel = lv_label_create(_backBtn);
     lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
     lv_obj_center(backLabel);
-
-    _contactSortBtn = lv_btn_create(_header);
-    lv_obj_set_size(_contactSortBtn, 74, 30);
-    lv_obj_align(_contactSortBtn, LV_ALIGN_RIGHT_MID, -4, 0);
-    lv_obj_set_style_bg_color(_contactSortBtn, lv_color_hex(0x1B2530), 0);
-    lv_obj_add_event_cb(_contactSortBtn, onContactSortClicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
-
-    lv_obj_t* sortLabel = lv_label_create(_contactSortBtn);
-    lv_label_set_text(sortLabel, LV_SYMBOL_SETTINGS " Sort");
-    lv_obj_center(sortLabel);
 
     _title = lv_label_create(_header);
     lv_obj_set_style_text_font(_title, &lv_font_montserrat_14, 0);
@@ -616,7 +609,6 @@ private:
 
     clearContent();
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
     WindowManager::instance().resetRightNavAction();
     lv_label_set_text(_title, "Messenger");
 
@@ -967,7 +959,6 @@ private:
     clearContent();
     lv_obj_update_layout(_content);
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(_title, isPrivate ? "Direct Chat" : "Channel Chat");
     WindowManager::instance().setRightNavAction(LV_SYMBOL_EDIT " Write", [this]() { showComposer(); });
 

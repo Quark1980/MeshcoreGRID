@@ -2176,3 +2176,18 @@ bool MyMesh::advert() {
     return false;
   }
 }
+
+bool MyMesh::advertFlood() {
+  mesh::Packet* pkt;
+  if (_prefs.advert_loc_policy == ADVERT_LOC_NONE) {
+    pkt = createSelfAdvert(_prefs.node_name);
+  } else {
+    pkt = createSelfAdvert(_prefs.node_name, sensors.node_lat, sensors.node_lon);
+  }
+  if (pkt) {
+    unsigned long delay_millis = 0;
+    sendFlood(pkt, delay_millis, _prefs.path_hash_mode + 1);
+    return true;
+  }
+  return false;
+}

@@ -24,6 +24,7 @@ MeshBridge::MeshBridge()
   _channelProvider(nullptr),
   _contactProvider(nullptr),
   _bleStateGetter(nullptr),
+  _bleConnectionGetter(nullptr),
   _bleToggleHandler(nullptr),
   _radioMetricsProvider(nullptr),
   _threadFilterEnabled(false),
@@ -45,6 +46,7 @@ bool MeshBridge::begin(mesh::Mesh* meshInstance,
   _mesh = meshInstance;
   _meshCfg = {meshTaskFn, meshTaskCtx};
   _uiCfg = {uiTaskFn, uiTaskCtx};
+  _bootNodeAdverts.clear();
 
   if (_rxQueue == nullptr) {
     _rxQueue = xQueueCreate(queueDepth, sizeof(BridgeEvent));
@@ -100,6 +102,7 @@ void MeshBridge::stop() {
     vQueueDelete(_txQueue);
     _txQueue = nullptr;
   }
+  _bootNodeAdverts.clear();
 }
 
 bool MeshBridge::sendTextFlood(const mesh::Identity& dest,
@@ -216,6 +219,15 @@ void MeshBridge::publishEvent(uint8_t eventType,
   if (text) {
     strncpy(ev.text, text, sizeof(ev.text) - 1);
   }
+
+  if (eventType == GRID_EVT_NODE_ADVERT) {
+    NodeAdvertSummary advert;
+    advert.sender = sender ? sender : "";
+    advert.text = text ? text : "";
+    advert.timestamp = timestamp;
+    _bootNodeAdverts.push_back(std::move(advert));
+  }
+
   xQueueSend(_rxQueue, &ev, 0);
 }
 
@@ -238,6 +250,10 @@ void MeshBridge::setContactProvider(ContactProvider provider) {
 void MeshBridge::setBleControl(BleStateGetter getter, BleToggleHandler setter) {
   _bleStateGetter = getter;
   _bleToggleHandler = setter;
+}
+
+void MeshBridge::setBleConnectionGetter(BleConnectionGetter getter) {
+  _bleConnectionGetter = getter;
 }
 
 void MeshBridge::setRadioMetricsProvider(RadioMetricsProvider provider) {
@@ -264,6 +280,13 @@ bool MeshBridge::refreshRadioMetrics() {
 bool MeshBridge::isBleEnabled() const {
   if (_bleStateGetter) {
     return _bleStateGetter();
+  }
+  return false;
+}
+
+bool MeshBridge::isBleConnected() const {
+  if (_bleConnectionGetter) {
+    return _bleConnectionGetter();
   }
   return false;
 }
@@ -301,6 +324,10 @@ std::vector<MeshBridge::ContactSummary> MeshBridge::getContacts() const {
     _contactProvider(contacts);
   }
   return contacts;
+}
+
+std::vector<MeshBridge::NodeAdvertSummary> MeshBridge::getBootNodeAdverts() const {
+  return _bootNodeAdverts;
 }
 
 void MeshBridge::setThreadFilter(uint32_t id, bool isPrivate) {

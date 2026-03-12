@@ -6,11 +6,13 @@
 #include <driver/rtc_io.h>
 
 class HeltecV4Board : public ESP32Board {
+private:
+  bool adc_active_state;
 
 public:
   RefCountedDigitalPin periph_power;
 
-  HeltecV4Board() : periph_power(PIN_VEXT_EN,PIN_VEXT_EN_ACTIVE) { }
+  HeltecV4Board() : adc_active_state(HIGH), periph_power(PIN_VEXT_EN,PIN_VEXT_EN_ACTIVE) { }
 
   void begin();
   void onBeforeTransmit(void) override;

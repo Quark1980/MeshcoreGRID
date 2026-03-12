@@ -3,9 +3,12 @@
 void HeltecV4Board::begin() {
     ESP32Board::begin();
 
+  // Auto-detect ADC switch polarity. Some board revisions invert this line.
+  pinMode(PIN_ADC_CTRL, INPUT);
+  adc_active_state = !digitalRead(PIN_ADC_CTRL);
 
-    pinMode(PIN_ADC_CTRL, OUTPUT);
-    digitalWrite(PIN_ADC_CTRL, LOW); // Initially inactive
+  pinMode(PIN_ADC_CTRL, OUTPUT);
+  digitalWrite(PIN_ADC_CTRL, !adc_active_state); // Initially inactive
 
     // Set up digital GPIO registers before releasing RTC hold. The hold latches
     // the pad state including function select, so register writes accumulate
@@ -27,6 +30,7 @@ void HeltecV4Board::begin() {
     }
 
     periph_power.begin();
+    periph_power.claim();
     if (reason == ESP_RST_DEEPSLEEP) {
       long wakeup_source = esp_sleep_get_ext1_wakeup_status();
       if (wakeup_source & (1 << P_LORA_DIO_1)) {  // received a LoRa packet (while in deep sleep)
@@ -61,10 +65,11 @@ void HeltecV4Board::begin() {
     rtc_gpio_hold_en((gpio_num_t)P_LORA_PA_POWER);
     rtc_gpio_hold_en((gpio_num_t)P_LORA_PA_EN);
 
-    if (pin_wake_btn < 0) {
-      esp_sleep_enable_ext1_wakeup( (1L << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);  // wake up on: recv LoRa packet
-    } else {
-      esp_sleep_enable_ext1_wakeup( (1L << P_LORA_DIO_1) | (1L << pin_wake_btn), ESP_EXT1_WAKEUP_ANY_HIGH);  // wake up on: recv LoRa packet OR wake btn
+    esp_sleep_enable_ext1_wakeup((1LL << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);  // wake up on: recv LoRa packet
+
+    if (pin_wake_btn >= 0) {
+      pinMode(pin_wake_btn, INPUT_PULLUP);
+      esp_sleep_enable_ext0_wakeup((gpio_num_t)pin_wake_btn, 0);  // wake on active-low PRG button
     }
 
     if (secs > 0) {
@@ -81,7 +86,7 @@ void HeltecV4Board::begin() {
 
   uint16_t HeltecV4Board::getBattMilliVolts()  {
     analogReadResolution(10);
-    digitalWrite(PIN_ADC_CTRL, HIGH);
+    digitalWrite(PIN_ADC_CTRL, adc_active_state);
     delay(10);
     uint32_t raw = 0;
     for (int i = 0; i < 8; i++) {
@@ -89,7 +94,7 @@ void HeltecV4Board::begin() {
     }
     raw = raw / 8;
 
-    digitalWrite(PIN_ADC_CTRL, LOW);
+    digitalWrite(PIN_ADC_CTRL, !adc_active_state);
 
     return (5.42 * (3.3 / 1024.0) * raw) * 1000;
   }

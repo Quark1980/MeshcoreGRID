@@ -94,7 +94,7 @@ void ensureRxDebugLabel() {
   lv_obj_set_style_pad_bottom(gRxDebugLabel, 5, 0);
   lv_obj_set_style_radius(gRxDebugLabel, 8, 0);
   lv_label_set_text(gRxDebugLabel, "");
-  lv_obj_align(gRxDebugLabel, LV_ALIGN_TOP_MID, 0, 34);
+  lv_obj_align(gRxDebugLabel, LV_ALIGN_BOTTOM_MID, 0, -60);
   lv_obj_add_flag(gRxDebugLabel, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -106,7 +106,6 @@ void showRxDebugOverlay(uint32_t count) {
   char text[64];
   snprintf(text, sizeof(text), "RX while screen off: %lu", static_cast<unsigned long>(count));
   lv_label_set_text(gRxDebugLabel, text);
-  lv_obj_align(gRxDebugLabel, LV_ALIGN_TOP_MID, 0, 34);
   lv_obj_clear_flag(gRxDebugLabel, LV_OBJ_FLAG_HIDDEN);
   gRxDebugHideAtMs = millis() + 4000;
 }
@@ -585,6 +584,13 @@ void setup() {
     (void)enabled;
     return false;
   #endif
+  });
+  bridge.setBleConnectionGetter([]() {
+#ifdef BLE_PIN_CODE
+    return serial_interface.isConnected();
+#else
+    return false;
+#endif
   });
   bridge.setChannelProvider([](std::vector<MeshBridge::ChannelSummary>& out) {
     out.clear();

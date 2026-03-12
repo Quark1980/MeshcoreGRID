@@ -75,6 +75,7 @@ private:
   lv_obj_t* _statusSignalLabel;
   lv_obj_t* _statusSignalBars[4];
   lv_obj_t* _statusBleLabel;
+  lv_obj_t* _statusBatteryLabel;
   lv_obj_t* _navBar;
   lv_obj_t* _rightNavButton;
   lv_obj_t* _rightNavLabel;
@@ -87,4 +88,5 @@ private:
   lv_style_t _styleStatus;
   lv_style_t _styleNav;
   lv_style_t _styleButton;
+  uint32_t _lastBatteryUpdateMs;
 };

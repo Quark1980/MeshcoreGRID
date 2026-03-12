@@ -28,8 +28,22 @@ public:
   struct ContactSummary {
     uint32_t id;
     std::string name;
+    std::string publicKeyHex;
+    uint8_t type;
+    uint8_t flags;
+    uint8_t outPathLen;
+    uint32_t lastAdvertTimestamp;
     uint32_t lastSeen;
     bool heardRecently;
+    int32_t gpsLat;
+    int32_t gpsLon;
+    uint32_t syncSince;
+  };
+
+  struct NodeAdvertSummary {
+    std::string sender;
+    std::string text;
+    uint32_t timestamp;
   };
 
   struct OutboxItem {
@@ -43,6 +57,7 @@ public:
   using ChannelProvider = std::function<void(std::vector<ChannelSummary>&)>;
   using ContactProvider = std::function<void(std::vector<ContactSummary>&)>;
   using BleStateGetter = std::function<bool()>;
+  using BleConnectionGetter = std::function<bool()>;
   using BleToggleHandler = std::function<bool(bool)>;
   using RadioMetricsProvider = std::function<bool(int16_t&, int8_t&)>;
 
@@ -77,15 +92,18 @@ public:
   void setChannelProvider(ChannelProvider provider);
   void setContactProvider(ContactProvider provider);
   void setBleControl(BleStateGetter getter, BleToggleHandler setter);
+  void setBleConnectionGetter(BleConnectionGetter getter);
   void setRadioMetricsProvider(RadioMetricsProvider provider);
   bool refreshRadioMetrics();
   bool isBleEnabled() const;
+  bool isBleConnected() const;
   bool setBleEnabled(bool enabled);
   bool hasRadioMetrics() const;
   int16_t lastRssi() const;
   int8_t lastSnr() const;
   std::vector<ChannelSummary> getChannels() const;
   std::vector<ContactSummary> getContacts() const;
+  std::vector<NodeAdvertSummary> getBootNodeAdverts() const;
 
   void setThreadFilter(uint32_t id, bool isPrivate);
   void clearThreadFilter();
@@ -147,6 +165,7 @@ private:
   ChannelProvider _channelProvider;
   ContactProvider _contactProvider;
   BleStateGetter _bleStateGetter;
+  BleConnectionGetter _bleConnectionGetter;
   BleToggleHandler _bleToggleHandler;
   RadioMetricsProvider _radioMetricsProvider;
 
@@ -160,5 +179,6 @@ private:
   std::map<uint8_t, std::vector<Observer>> _observers;
   std::map<uint32_t, int> _unreadCounts;
   std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
+  std::vector<NodeAdvertSummary> _bootNodeAdverts;
   MeshApp* _activeApp;
 };

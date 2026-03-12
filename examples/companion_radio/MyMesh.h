@@ -100,6 +100,7 @@ public:
   void loop();
   void handleCmdFrame(size_t len);
   bool advert();
+  bool advertFlood();
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
