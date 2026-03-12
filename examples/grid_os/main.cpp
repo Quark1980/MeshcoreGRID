@@ -700,9 +700,9 @@ void loop() {
   static uint32_t lastUiTickMs = 0;
   MeshBridge& bridge = MeshBridge::instance();
 
-  const uint32_t now = millis();
+  const uint32_t loopStartMs = millis();
   if (lastUiTickMs == 0) {
-    lastUiTickMs = now;
+    lastUiTickMs = loopStartMs;
   }
 
   the_mesh.loop();
@@ -718,19 +718,23 @@ void loop() {
   }
 
   if (!gDisplaySleeping) {
-    uint32_t uiDelta = now - lastUiTickMs;
+    uint32_t uiDelta = loopStartMs - lastUiTickMs;
     if (uiDelta == 0) {
       uiDelta = 1;
     } else if (uiDelta > 50) {
       uiDelta = 50;
     }
     lv_tick_inc(uiDelta);
-    lastUiTickMs = now;
+    lastUiTickMs = loopStartMs;
     lv_timer_handler();
     WindowManager::instance().tick();
   } else {
-    lastUiTickMs = now;
+    lastUiTickMs = loopStartMs;
   }
+
+  // Use a fresh timestamp after input/UI handling so timeout math cannot underflow
+  // when noteInteraction() updated gLastInteractionMs during lv_timer_handler().
+  const uint32_t now = millis();
 
   const uint32_t packetCountNow = grid::radio_telemetry::packetCount();
   if (packetCountNow > gLastPacketCountObserved) {
