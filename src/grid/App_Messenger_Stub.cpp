@@ -878,10 +878,10 @@ private:
       meta = lv_label_create(row);
       char metaText[48];
       if (timesHeard > 0) {
-        snprintf(metaText, sizeof(metaText), "👂 %u", static_cast<unsigned>(timesHeard));
+        snprintf(metaText, sizeof(metaText), "* Heard: %u", static_cast<unsigned>(timesHeard));
         lv_obj_set_style_text_color(meta, lv_color_hex(0x00D084), 0);  // Green = confirmed by mesh
       } else {
-        snprintf(metaText, sizeof(metaText), "👂 0");
+        snprintf(metaText, sizeof(metaText), "* Sent");
         lv_obj_set_style_text_color(meta, lv_color_hex(0x9BA3AF), 0);  // Grey = waiting
       }
       lv_label_set_text(meta, metaText);
@@ -893,10 +893,10 @@ private:
       lv_obj_t* metaHops = lv_label_create(row);
       char hopsText[32];
       if (hopCount == 0) {
-        snprintf(hopsText, sizeof(hopsText), "📡 Direct");
+        snprintf(hopsText, sizeof(hopsText), "~ Direct");
         lv_obj_set_style_text_color(metaHops, lv_color_hex(0x00D084), 0);  // Green = zero hops
       } else {
-        snprintf(hopsText, sizeof(hopsText), "📡 %u Hops", static_cast<unsigned>(hopCount));
+        snprintf(hopsText, sizeof(hopsText), "~ %u Hops", static_cast<unsigned>(hopCount));
         lv_obj_set_style_text_color(metaHops, lv_color_hex(0x6D7B8E), 0);  // Grey = via repeater
       }
       lv_label_set_text(metaHops, hopsText);
@@ -941,7 +941,7 @@ private:
       }
       pending.timesHeard = nextHeard;
       char heardText[48];
-      snprintf(heardText, sizeof(heardText), "👂 %u", static_cast<unsigned>(pending.timesHeard));
+      snprintf(heardText, sizeof(heardText), "* Heard: %u", static_cast<unsigned>(pending.timesHeard));
       lv_label_set_text(pending.metaLabel, heardText);
       lv_obj_set_style_text_color(pending.metaLabel, lv_color_hex(0x00D084), 0);  // Green = confirmed
       return true;
