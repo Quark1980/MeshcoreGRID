@@ -837,17 +837,7 @@ private:
 
     if (!isMe) {
       lv_obj_t* senderLbl = lv_label_create(row);
-      char senderText[96];
-      if (hopCount == 0) {
-        snprintf(senderText, sizeof(senderText), "%s  Direct", (sender && sender[0]) ? sender : "Unknown");
-      } else {
-        snprintf(senderText,
-                 sizeof(senderText),
-                 "%s  %u Hops",
-                 (sender && sender[0]) ? sender : "Unknown",
-                 static_cast<unsigned>(hopCount));
-      }
-      lv_label_set_text(senderLbl, senderText);
+      lv_label_set_text(senderLbl, (sender && sender[0]) ? sender : "Unknown");
       lv_obj_set_style_text_color(senderLbl, senderColor(sender), 0);
       lv_obj_set_style_text_font(senderLbl, &lv_font_montserrat_12, 0);
       lv_obj_set_style_pad_left(senderLbl, 2, 0);
@@ -884,18 +874,36 @@ private:
 
     lv_obj_t* meta = nullptr;
     if (isMe) {
+      // Mesh confirmation for own sent messages: show Times Heard (repeater echoes)
       meta = lv_label_create(row);
-      char metaText[40];
+      char metaText[48];
       if (timesHeard > 0) {
-        snprintf(metaText, sizeof(metaText), "Heard %u Repeats", static_cast<unsigned>(timesHeard));
+        snprintf(metaText, sizeof(metaText), "👂 %u", static_cast<unsigned>(timesHeard));
+        lv_obj_set_style_text_color(meta, lv_color_hex(0x00D084), 0);  // Green = confirmed by mesh
       } else {
-        snprintf(metaText, sizeof(metaText), "Sent");
+        snprintf(metaText, sizeof(metaText), "👂 0");
+        lv_obj_set_style_text_color(meta, lv_color_hex(0x9BA3AF), 0);  // Grey = waiting
       }
       lv_label_set_text(meta, metaText);
-      lv_obj_set_style_text_color(meta, lv_color_hex(0x6D7B8E), 0);
       lv_obj_set_style_text_font(meta, &lv_font_montserrat_10, 0);
-      lv_obj_set_style_pad_top(meta, 1, 0);
+      lv_obj_set_style_pad_top(meta, 2, 0);
       lv_obj_set_style_pad_left(meta, 3, 0);
+    } else {
+      // Mesh confirmation for received messages: show hop count
+      lv_obj_t* metaHops = lv_label_create(row);
+      char hopsText[32];
+      if (hopCount == 0) {
+        snprintf(hopsText, sizeof(hopsText), "📡 Direct");
+        lv_obj_set_style_text_color(metaHops, lv_color_hex(0x00D084), 0);  // Green = zero hops
+      } else {
+        snprintf(hopsText, sizeof(hopsText), "📡 %u Hops", static_cast<unsigned>(hopCount));
+        lv_obj_set_style_text_color(metaHops, lv_color_hex(0x6D7B8E), 0);  // Grey = via repeater
+      }
+      lv_label_set_text(metaHops, hopsText);
+      lv_obj_set_style_text_font(metaHops, &lv_font_montserrat_10, 0);
+      lv_obj_set_style_pad_top(metaHops, 2, 0);
+      lv_obj_set_style_pad_left(metaHops, 2, 0);
+      meta = metaHops;
     }
 
     lv_obj_update_layout(_threadList);
@@ -932,9 +940,10 @@ private:
         nextHeard = msg.timesHeard;
       }
       pending.timesHeard = nextHeard;
-      char heardText[40];
-      snprintf(heardText, sizeof(heardText), "Heard %u Repeats", static_cast<unsigned>(pending.timesHeard));
+      char heardText[48];
+      snprintf(heardText, sizeof(heardText), "👂 %u", static_cast<unsigned>(pending.timesHeard));
       lv_label_set_text(pending.metaLabel, heardText);
+      lv_obj_set_style_text_color(pending.metaLabel, lv_color_hex(0x00D084), 0);  // Green = confirmed
       return true;
     }
     return false;
