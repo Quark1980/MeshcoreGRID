@@ -697,24 +697,40 @@ void setup() {
 
 void loop() {
   static uint32_t lastRadioMetricsMs = 0;
+  static uint32_t lastUiTickMs = 0;
   MeshBridge& bridge = MeshBridge::instance();
+
+  const uint32_t now = millis();
+  if (lastUiTickMs == 0) {
+    lastUiTickMs = now;
+  }
 
   the_mesh.loop();
   sensors.loop();
   rtc_clock.tick();
 
   MeshBridge::OutboxItem outItem{};
-  while (bridge.dequeueOutboxText(outItem, 0)) {
+  // Keep loop responsive: drain only a small burst per pass.
+  int outboxBurst = 0;
+  while (outboxBurst < 3 && bridge.dequeueOutboxText(outItem, 0)) {
     sendQueuedOutboxItem(outItem);
+    outboxBurst++;
   }
 
   if (!gDisplaySleeping) {
-    lv_tick_inc(5);
+    uint32_t uiDelta = now - lastUiTickMs;
+    if (uiDelta == 0) {
+      uiDelta = 1;
+    } else if (uiDelta > 50) {
+      uiDelta = 50;
+    }
+    lv_tick_inc(uiDelta);
+    lastUiTickMs = now;
     lv_timer_handler();
     WindowManager::instance().tick();
+  } else {
+    lastUiTickMs = now;
   }
-
-  const uint32_t now = millis();
 
   const uint32_t packetCountNow = grid::radio_telemetry::packetCount();
   if (packetCountNow > gLastPacketCountObserved) {
@@ -765,5 +781,5 @@ void loop() {
     }
   }
 
-  delay(5);
+  delay(1);
 }
