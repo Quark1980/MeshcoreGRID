@@ -152,22 +152,24 @@ public:
     lv_obj_t* advertTab = lv_tabview_add_tab(_tabview, "Advert");
     lv_obj_t* metricsTab = lv_tabview_add_tab(_tabview, "Metrics");
 
-    lv_obj_t* advertCard = lv_obj_create(advertTab);
-    lv_obj_set_size(advertCard, LV_PCT(98), LV_PCT(96));
-    lv_obj_align(advertCard, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_radius(advertCard, 12, 0);
-    lv_obj_set_style_bg_color(advertCard, lv_color_hex(0x1A1F27), 0);
-    lv_obj_set_style_border_color(advertCard, lv_color_hex(0x2F3947), 0);
+    lv_obj_clear_flag(advertTab, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(advertTab, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(metricsTab, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(metricsTab, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(metricsTab, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_bg_opa(metricsTab, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(metricsTab, lv_color_hex(0x121821), 0);
+    lv_obj_set_style_border_width(metricsTab, 0, 0);
 
-    lv_obj_t* advertHint = lv_label_create(advertCard);
+    lv_obj_t* advertHint = lv_label_create(advertTab);
     lv_label_set_text(advertHint, "Send this node advertisement as zero-hop or flood.");
     lv_obj_set_style_text_color(advertHint, lv_color_hex(0x9FAABB), 0);
     lv_obj_set_style_text_font(advertHint, &lv_font_montserrat_14, 0);
-    lv_obj_align(advertHint, LV_ALIGN_TOP_LEFT, 12, 12);
+    lv_obj_align(advertHint, LV_ALIGN_TOP_LEFT, 8, 18);
 
-    lv_obj_t* zeroHopBtn = lv_btn_create(advertCard);
+    lv_obj_t* zeroHopBtn = lv_btn_create(advertTab);
     lv_obj_set_size(zeroHopBtn, LV_PCT(84), 42);
-    lv_obj_align(zeroHopBtn, LV_ALIGN_TOP_MID, 0, 52);
+    lv_obj_align(zeroHopBtn, LV_ALIGN_TOP_MID, 0, 62);
     lv_obj_set_style_bg_color(zeroHopBtn, lv_color_hex(0x1B2530), 0);
     lv_obj_set_style_bg_color(zeroHopBtn, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
     lv_obj_add_event_cb(zeroHopBtn, [](lv_event_t* e) {
@@ -181,9 +183,9 @@ public:
     lv_label_set_text(zeroHopLabel, LV_SYMBOL_WIFI " Advert Zero-Hop");
     lv_obj_center(zeroHopLabel);
 
-    lv_obj_t* floodBtn = lv_btn_create(advertCard);
+    lv_obj_t* floodBtn = lv_btn_create(advertTab);
     lv_obj_set_size(floodBtn, LV_PCT(84), 42);
-    lv_obj_align(floodBtn, LV_ALIGN_TOP_MID, 0, 104);
+    lv_obj_align(floodBtn, LV_ALIGN_TOP_MID, 0, 118);
     lv_obj_set_style_bg_color(floodBtn, lv_color_hex(0x1B2530), 0);
     lv_obj_set_style_bg_color(floodBtn, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
     lv_obj_add_event_cb(floodBtn, [](lv_event_t* e) {
@@ -197,24 +199,22 @@ public:
     lv_label_set_text(floodLabel, LV_SYMBOL_WIFI " Advert Flood");
     lv_obj_center(floodLabel);
 
-    _advertStatus = lv_label_create(advertCard);
+    _advertStatus = lv_label_create(advertTab);
     lv_obj_set_style_text_font(_advertStatus, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(_advertStatus, lv_color_hex(0x9FAABB), 0);
-    lv_obj_align(_advertStatus, LV_ALIGN_TOP_LEFT, 12, 160);
+    lv_obj_align(_advertStatus, LV_ALIGN_TOP_LEFT, 8, 176);
     lv_label_set_text(_advertStatus, "");
 
-    lv_obj_t* metricsCard = lv_obj_create(metricsTab);
-    lv_obj_set_size(metricsCard, LV_PCT(98), LV_PCT(96));
-    lv_obj_align(metricsCard, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_radius(metricsCard, 12, 0);
-    lv_obj_set_style_bg_color(metricsCard, lv_color_hex(0x1A1F27), 0);
-    lv_obj_set_style_border_color(metricsCard, lv_color_hex(0x2F3947), 0);
+    lv_obj_set_style_pad_top(metricsTab, 10, 0);
+    lv_obj_set_style_pad_bottom(metricsTab, 14, 0);
+    lv_obj_set_style_pad_left(metricsTab, 10, 0);
+    lv_obj_set_style_pad_right(metricsTab, 10, 0);
 
-    _metricsText = lv_label_create(metricsCard);
-    lv_obj_set_width(_metricsText, LV_PCT(100));
-    lv_obj_set_style_text_color(_metricsText, lv_color_hex(0xD6E0EC), 0);
+    _metricsText = lv_label_create(metricsTab);
+    lv_obj_set_width(_metricsText, LV_PCT(98));
+    lv_obj_set_style_text_color(_metricsText, lv_color_hex(0xC7D1DE), 0);
     lv_obj_set_style_text_font(_metricsText, &lv_font_montserrat_14, 0);
-    lv_obj_align(_metricsText, LV_ALIGN_TOP_LEFT, 12, 14);
+    lv_obj_align(_metricsText, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_label_set_long_mode(_metricsText, LV_LABEL_LONG_WRAP);
     lv_label_set_text(_metricsText, "Loading...");
 
@@ -327,26 +327,34 @@ public:
     lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
 
     lv_obj_t* card = lv_obj_create(layout);
-    lv_obj_set_size(card, LV_PCT(92), 176);
+    lv_obj_set_size(card, LV_PCT(92), 212);
     lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 56);
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
     _state = lv_label_create(card);
+    lv_obj_set_width(_state, LV_PCT(100));
+    lv_label_set_long_mode(_state, LV_LABEL_LONG_WRAP);
     lv_obj_align(_state, LV_ALIGN_TOP_LEFT, 12, 14);
 
     _pin = lv_label_create(card);
     lv_obj_set_style_text_font(_pin, &lv_font_montserrat_20, 0);
-    lv_obj_align(_pin, LV_ALIGN_TOP_LEFT, 12, 54);
+    lv_obj_set_style_text_color(_pin, lv_color_hex(0xE2E8F0), 0);
+    lv_obj_set_width(_pin, LV_PCT(100));
+    lv_label_set_long_mode(_pin, LV_LABEL_LONG_WRAP);
+    lv_obj_align(_pin, LV_ALIGN_TOP_LEFT, 12, 62);
 
     _connection = lv_label_create(card);
     lv_obj_set_style_text_color(_connection, lv_color_hex(0x9FAABB), 0);
-    lv_obj_align(_connection, LV_ALIGN_TOP_LEFT, 12, 92);
+    lv_obj_set_width(_connection, LV_PCT(100));
+    lv_label_set_long_mode(_connection, LV_LABEL_LONG_WRAP);
+    lv_obj_align(_connection, LV_ALIGN_TOP_LEFT, 12, 108);
 
     _toggleBtn = lv_btn_create(card);
-    lv_obj_set_size(_toggleBtn, 136, 40);
-    lv_obj_align(_toggleBtn, LV_ALIGN_BOTTOM_LEFT, 12, -12);
+    lv_obj_set_size(_toggleBtn, 156, 40);
+    lv_obj_align(_toggleBtn, LV_ALIGN_BOTTOM_LEFT, 12, -16);
     lv_obj_set_style_bg_color(_toggleBtn, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
     _toggleText = lv_label_create(_toggleBtn);
     lv_obj_center(_toggleText);
@@ -382,7 +390,13 @@ private:
 
     lv_label_set_text(_state, enabled ? "Companion BLE: enabled" : "Companion BLE: disabled");
     char pinText[64];
-    const uint32_t pin = the_mesh.getBLEPin();
+    NodePrefs* prefs = the_mesh.getNodePrefs();
+    uint32_t pin = prefs ? prefs->ble_pin : 0;
+#ifdef BLE_PIN_CODE
+    if (pin == 0) {
+      pin = static_cast<uint32_t>(BLE_PIN_CODE);
+    }
+#endif
     if (pin > 0) {
       snprintf(pinText, sizeof(pinText), "PIN: %lu", (unsigned long)pin);
     } else {
