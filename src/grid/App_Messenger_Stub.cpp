@@ -283,7 +283,7 @@ private:
       if (self->_contactSortBtn != nullptr) {
         lv_obj_clear_flag(self->_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
       }
-      WindowManager::instance().setRightNavAction(LV_SYMBOL_SETTINGS " Sort", [self]() { self->openContactSortDialog(); });
+      WindowManager::instance().setRightNavAction(LV_SYMBOL_SETTINGS " Sort", [self]() { self->toggleContactSort(); });
       if (!self->_contactsLoaded) {
         self->refreshContactList();
         self->_contactsLoaded = true;
@@ -303,54 +303,24 @@ private:
     return an < bn;
   }
 
-  static void onContactSortDialog(lv_event_t* e) {
-    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
-    if (self == nullptr) {
-      return;
-    }
-
-    lv_obj_t* dialog = lv_event_get_target(e);
-    const char* choice = lv_msgbox_get_active_btn_text(dialog);
-    if (choice != nullptr) {
-      bool changed = false;
-      if (strcmp(choice, "Name") == 0) {
-        self->_contactSortMode = ContactSortMode::Name;
-        changed = true;
-      } else if (strcmp(choice, "Recent") == 0) {
-        self->_contactSortMode = ContactSortMode::LastSeen;
-        changed = true;
-      }
-      if (changed) {
-        // Defer the refresh to the next event-loop tick so we don't call
-        // lv_obj_clean / object-create inside the msgbox VALUE_CHANGED event
-        // callback — that deep nesting causes heap/stack corruption on ESP32.
-        lv_async_call([](void* ud) {
-          static_cast<MessengerManagerApp*>(ud)->refreshContactList();
-        }, self);
-      }
-    }
-    lv_msgbox_close(dialog);
-  }
-
   static void onContactSortClicked(lv_event_t* e) {
     auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
     if (self == nullptr) {
       return;
     }
 
-    self->openContactSortDialog();
+    self->toggleContactSort();
   }
 
-  void openContactSortDialog() {
+  void toggleContactSort() {
     if (_inThread) {
       return;
     }
 
-    static const char* buttons[] = {"Recent", "Name", ""};
-    lv_obj_t* msg = lv_msgbox_create(nullptr, "Sort", "Order contacts by:", buttons, true);
-    lv_obj_set_width(msg, LV_PCT(80));
-    lv_obj_center(msg);
-    lv_obj_add_event_cb(msg, onContactSortDialog, LV_EVENT_VALUE_CHANGED, this);
+    _contactSortMode = (_contactSortMode == ContactSortMode::LastSeen)
+        ? ContactSortMode::Name
+        : ContactSortMode::LastSeen;
+    refreshContactList();
   }
 
   const MeshBridge::ContactSummary* findVisibleContact(uint32_t id) const {
