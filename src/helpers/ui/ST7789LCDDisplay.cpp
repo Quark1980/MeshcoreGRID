@@ -152,12 +152,13 @@ void ST7789LCDDisplay::turnOn() {
 
 void ST7789LCDDisplay::turnOff() {
   if (_isOn) {
-    if (PIN_TFT_LEDA_CTL != -1) {
-      digitalWrite(PIN_TFT_LEDA_CTL, HIGH);
-    }
+    // Pull the display RST line LOW to hold the controller in reset while the
+    // backlight is off, preventing ghost images or stray SPI activity.
     if (PIN_TFT_RST != -1) {
       digitalWrite(PIN_TFT_RST, LOW);
     }
+    // Turn the backlight off AFTER putting the display in reset so there is
+    // no brief flash (the previous code incorrectly set the pin HIGH first).
     if (PIN_TFT_LEDA_CTL != -1) {
       digitalWrite(PIN_TFT_LEDA_CTL, LOW);
     }

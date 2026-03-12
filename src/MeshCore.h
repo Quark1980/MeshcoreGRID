@@ -65,6 +65,12 @@ public:
   virtual const char* getResetReasonString(uint32_t reason) { return "Not available"; }
   virtual uint8_t getShutdownReason() const { return 0; }
   virtual const char* getShutdownReasonString(uint8_t reason) { return "Not available"; }
+
+  // Returns true if the radio receive-complete interrupt is currently asserted
+  // but the interrupt handler has not yet run (e.g. after waking from light
+  // sleep where the GPIO ISR may have been suppressed).  Boards that support
+  // this check override the method to read the DIO1 pin directly.
+  virtual bool isReceiveInterruptPending() { return false; }
 };
 
 /**

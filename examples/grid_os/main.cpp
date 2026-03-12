@@ -61,6 +61,28 @@ uint8_t touchSda = TOUCH_SDA;
 uint8_t touchScl = TOUCH_SCL;
 bool gBleEnabled = false;
 
+// Screen saver: turn off the backlight after this many ms of no touch input.
+// The main loop (the_mesh.loop, LVGL timers) continues normally when the screen
+// is off so the LoRa radio keeps receiving packets.
+#ifndef SCREEN_TIMEOUT_MS
+  #define SCREEN_TIMEOUT_MS 60000u  // 60 seconds
+#endif
+bool gScreenOn = true;
+uint32_t gLastActivityMs = 0;
+
+// Set backlight duty cycle: ON or OFF.  Respects PIN_TFT_LEDA_CTL_ACTIVE polarity.
+inline void setBacklight(bool on) {
+#ifdef PIN_TFT_LEDA_CTL
+  // Duty cycle 200 ≈ 78 % brightness; mirrors the ledcWrite(0, ...) call in setup().
+#ifdef PIN_TFT_LEDA_CTL_ACTIVE
+  // ACTIVE=HIGH → duty 200 = on;  ACTIVE=LOW → duty 0 = on (inverted).
+  ledcWrite(0, PIN_TFT_LEDA_CTL_ACTIVE ? (on ? 200u : 0u) : (on ? 0u : 200u));
+#else
+  ledcWrite(0, on ? 200u : 0u);
+#endif
+#endif
+}
+
 bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
   if (item.isPrivate) {
     const int total = the_mesh.getNumContacts();
@@ -101,12 +123,17 @@ bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
 }
 
 void lvglFlush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
-  const uint32_t w = static_cast<uint32_t>(area->x2 - area->x1 + 1);
-  const uint32_t h = static_cast<uint32_t>(area->y2 - area->y1 + 1);
-  tft.startWrite();
-  tft.setAddrWindow(area->x1, area->y1, w, h);
-  tft.pushColors(reinterpret_cast<uint16_t*>(color_p), w * h, true);
-  tft.endWrite();
+  // When the screen is off (screen saver active) skip the TFT SPI transfer.
+  // This frees ~60 ms per full-screen frame that would otherwise block the
+  // main loop and delay the_mesh.loop() / radio reception.
+  if (gScreenOn) {
+    const uint32_t w = static_cast<uint32_t>(area->x2 - area->x1 + 1);
+    const uint32_t h = static_cast<uint32_t>(area->y2 - area->y1 + 1);
+    tft.startWrite();
+    tft.setAddrWindow(area->x1, area->y1, w, h);
+    tft.pushColors(reinterpret_cast<uint16_t*>(color_p), w * h, true);
+    tft.endWrite();
+  }
   lv_disp_flush_ready(disp);
 }
 
@@ -193,6 +220,23 @@ void lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   int16_t x = 0;
   int16_t y = 0;
   if (readTouchPoint(&x, &y)) {
+    // Any touch extends the screen-on timeout.
+    gLastActivityMs = millis();
+
+    if (!gScreenOn) {
+      // Screen was off: turn it on immediately and consume this touch as a
+      // wake gesture so it does not accidentally activate a UI element.
+      // Setting gScreenOn here (rather than waiting for the next loop
+      // iteration) avoids an extra 5 ms window where a second touch could
+      // still be treated as a wake gesture.
+      gScreenOn = true;
+      setBacklight(true);
+      lv_obj_invalidate(lv_scr_act());
+      data->state = LV_INDEV_STATE_REL;
+      data->continue_reading = false;
+      return;
+    }
+
     data->state = LV_INDEV_STATE_PR;
     data->point.x = x;
     data->point.y = y;
@@ -459,6 +503,9 @@ void setup() {
 
   sensors.begin();
 
+  // Initialise the screen-saver timer so the screen stays on during boot.
+  gLastActivityMs = millis();
+
 }
 
 void loop() {
@@ -472,6 +519,22 @@ void loop() {
   MeshBridge::OutboxItem outItem{};
   while (bridge.dequeueOutboxText(outItem, 0)) {
     sendQueuedOutboxItem(outItem);
+  }
+
+  // Screen-saver management.  Runs before lv_timer_handler() so that
+  // gScreenOn is up-to-date when lvglFlush() is called from LVGL.
+  // Note: unsigned subtraction is intentionally rollover-safe: the result
+  // is always the true elapsed time even after millis() wraps at ~49 days.
+  {
+    const uint32_t now = millis();
+    if ((now - gLastActivityMs) >= SCREEN_TIMEOUT_MS && gScreenOn) {
+      // Screen-saver: turn off the backlight only.  The CPU and radio keep
+      // running normally so LoRa reception is unaffected.
+      gScreenOn = false;
+      setBacklight(false);
+    }
+    // Wake-up is handled immediately inside lvglTouchRead() so no explicit
+    // turn-on path is needed here.
   }
 
   lv_tick_inc(5);

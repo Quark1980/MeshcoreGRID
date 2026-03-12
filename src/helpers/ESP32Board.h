@@ -121,6 +121,17 @@ public:
     esp_restart();
   }
 
+  // After waking from light sleep the GPIO interrupt for DIO1 may not have
+  // fired even though the pin is asserted.  Poll the pin so the radio wrapper
+  // can recover the missed packet without relying on the ISR.
+  bool isReceiveInterruptPending() override {
+#if defined(P_LORA_DIO_1)
+    return digitalRead(P_LORA_DIO_1) == HIGH;
+#else
+    return false;
+#endif
+  }
+
   bool startOTAUpdate(const char* id, char reply[]) override;
 
   void setInhibitSleep(bool inhibit) {

@@ -108,6 +108,13 @@ bool RadioLibWrapper::isInRecvMode() const {
 
 int RadioLibWrapper::recvRaw(uint8_t* bytes, int sz) {
   int len = 0;
+  // After waking from light sleep the GPIO interrupt handler for DIO1 may not
+  // have run even though the pin is still asserted (the radio has a packet
+  // waiting in its FIFO).  Poll the board to detect this case and treat it the
+  // same as a normal interrupt so the packet is not silently discarded.
+  if (!(state & STATE_INT_READY) && _board->isReceiveInterruptPending()) {
+    state |= STATE_INT_READY;
+  }
   if (state & STATE_INT_READY) {
     len = _radio->getPacketLength();
     if (len > 0) {
