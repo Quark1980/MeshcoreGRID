@@ -412,6 +412,10 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
 
     if (isTextPacketType(msg.packetType)) {
       mergedIntoLocal = appendThreadHistory(msg, &msg);
+      // Mark echo as local so UI knows to merge with original sent message
+      if (mergedIntoLocal) {
+        msg.isLocal = true;
+      }
     }
 
     if (isTextPacketType(msg.packetType) && !msg.isLocal && !_threadFilterEnabled) {

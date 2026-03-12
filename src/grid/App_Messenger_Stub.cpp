@@ -824,9 +824,10 @@ private:
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
+    // For column layout: main_align=vertical, cross_align=horizontal (left/right)
     lv_obj_set_flex_align(row,
-                          isMe ? LV_FLEX_ALIGN_END : LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START,
+                          isMe ? LV_FLEX_ALIGN_END : LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -907,7 +908,8 @@ private:
     }
 
     lv_obj_update_layout(_threadList);
-    lv_obj_scroll_to_view(row, LV_ANIM_OFF);
+    // Scroll to latest message (bottom of thread)
+    lv_obj_scroll_to_y(_threadList, lv_obj_get_height(_threadList), LV_ANIM_OFF);
     return meta;
   }
 
@@ -1009,7 +1011,7 @@ private:
     lv_obj_set_style_bg_opa(_threadList, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(_threadList, 0, 0);
     lv_obj_set_style_pad_top(_threadList, 6, 0);
-    lv_obj_set_style_pad_bottom(_threadList, 10, 0);
+    lv_obj_set_style_pad_bottom(_threadList, 70, 0);  // Extra padding to avoid navbar overlap
     lv_obj_set_style_pad_left(_threadList, 0, 0);
     lv_obj_set_style_pad_right(_threadList, 0, 0);
     lv_obj_set_style_pad_row(_threadList, 2, 0);
