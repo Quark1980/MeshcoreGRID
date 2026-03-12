@@ -461,16 +461,27 @@ bool MeshBridge::isTextPacketType(uint8_t packetType) const {
 bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolvedMsg) {
   constexpr size_t kMaxPerThread = 24;
   constexpr size_t kMaxThreads = 16;
+  constexpr uint32_t kEchoTimestampToleranceMs = 5000;
 
   const uint32_t key = makeThreadKey(msg.threadId, msg.isPrivate);
   auto& history = _threadHistory[key];
 
   if (!msg.isLocal) {
-    for (auto& entry : history) {
+    for (auto it = history.rbegin(); it != history.rend(); ++it) {
+      auto& entry = *it;
       if (!entry.isLocal) {
         continue;
       }
-      if (entry.timestamp != msg.timestamp || entry.text != msg.text) {
+      if (entry.text != msg.text) {
+        continue;
+      }
+
+      const uint32_t tsA = entry.timestamp;
+      const uint32_t tsB = msg.timestamp;
+      const uint32_t diff = (tsA > tsB) ? (tsA - tsB) : (tsB - tsA);
+      const bool timestampClose = (tsA == tsB) || (diff <= kEchoTimestampToleranceMs);
+      const bool fallbackToLatestSameText = (it == history.rbegin() && entry.timesHeard == 0);
+      if (!timestampClose && !fallbackToLatestSameText) {
         continue;
       }
 

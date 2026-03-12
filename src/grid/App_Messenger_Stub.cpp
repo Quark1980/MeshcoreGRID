@@ -819,6 +819,8 @@ private:
     }
 
     lv_obj_t* row = lv_obj_create(_threadList);
+    lv_obj_remove_style_all(row);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_COLUMN);
@@ -853,6 +855,8 @@ private:
     }
 
     lv_obj_t* bubble = lv_obj_create(row);
+    lv_obj_remove_style_all(bubble);
+    lv_obj_clear_flag(bubble, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_width(bubble, LV_PCT(86));
     lv_obj_set_height(bubble, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(bubble, LV_FLEX_FLOW_COLUMN);
@@ -863,6 +867,7 @@ private:
     lv_obj_set_style_pad_right(bubble, 10, 0);
     lv_obj_set_style_pad_top(bubble, 7, 0);
     lv_obj_set_style_pad_bottom(bubble, 7, 0);
+    lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
 
     if (isMe) {
       lv_obj_set_style_bg_color(bubble, lv_color_hex(0x2F6DF6), 0);
@@ -894,23 +899,39 @@ private:
     }
 
     lv_obj_update_layout(_threadList);
-    lv_obj_scroll_to_y(_threadList, LV_COORD_MAX, LV_ANIM_OFF);
+    lv_obj_scroll_to_view(row, LV_ANIM_OFF);
     return meta;
   }
 
   bool tryResolveEcho(const MeshMessage& msg) {
-    for (auto& pending : _pendingEchoes) {
+    constexpr uint32_t kEchoTimestampToleranceMs = 5000;
+
+    for (auto it = _pendingEchoes.rbegin(); it != _pendingEchoes.rend(); ++it) {
+      auto& pending = *it;
       if (pending.threadId != msg.threadId || pending.isPrivate != msg.isPrivate) {
         continue;
       }
-      if (pending.timestamp != msg.timestamp || pending.text != msg.text) {
+      if (pending.text != msg.text) {
+        continue;
+      }
+
+      const uint32_t tsA = pending.timestamp;
+      const uint32_t tsB = msg.timestamp;
+      const uint32_t diff = (tsA > tsB) ? (tsA - tsB) : (tsB - tsA);
+      const bool timestampClose = (tsA == tsB) || (diff <= kEchoTimestampToleranceMs);
+      const bool fallbackToLatestSameText = (it == _pendingEchoes.rbegin() && pending.timesHeard == 0);
+      if (!timestampClose && !fallbackToLatestSameText) {
         continue;
       }
       if (pending.metaLabel == nullptr) {
         return true;
       }
 
-      pending.timesHeard = static_cast<uint8_t>(pending.timesHeard + 1);
+      uint8_t nextHeard = static_cast<uint8_t>(pending.timesHeard + 1);
+      if (msg.timesHeard > nextHeard) {
+        nextHeard = msg.timesHeard;
+      }
+      pending.timesHeard = nextHeard;
       char heardText[40];
       snprintf(heardText, sizeof(heardText), "Heard %u Repeats", static_cast<unsigned>(pending.timesHeard));
       lv_label_set_text(pending.metaLabel, heardText);
@@ -970,12 +991,23 @@ private:
     lv_obj_set_style_border_width(_composer, 0, 0);
     lv_obj_set_style_pad_all(_composer, 8, 0);
 
-    _threadList = lv_list_create(_content);
+    _threadList = lv_obj_create(_content);
+    lv_obj_remove_style_all(_threadList);
     lv_obj_set_size(_threadList, LV_PCT(100), LV_PCT(100));
     lv_obj_set_height(_threadList, lv_obj_get_height(_content) - navOverlapInContent());
     lv_obj_align(_threadList, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_color(_threadList, lv_color_hex(0x101820), 0);
+    lv_obj_set_style_bg_opa(_threadList, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(_threadList, 0, 0);
+    lv_obj_set_style_pad_top(_threadList, 6, 0);
+    lv_obj_set_style_pad_bottom(_threadList, 10, 0);
+    lv_obj_set_style_pad_left(_threadList, 0, 0);
+    lv_obj_set_style_pad_right(_threadList, 0, 0);
+    lv_obj_set_style_pad_row(_threadList, 2, 0);
+    lv_obj_set_scrollbar_mode(_threadList, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_scroll_dir(_threadList, LV_DIR_VER);
+    lv_obj_set_flex_flow(_threadList, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(_threadList, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
     lv_obj_move_foreground(_composer);
 
@@ -1030,9 +1062,12 @@ private:
     }
 
     if (!addedHistory) {
-      lv_obj_t* empty = lv_list_add_text(_threadList, "No messages yet");
+      lv_obj_t* empty = lv_label_create(_threadList);
+      lv_label_set_text(empty, "No messages yet");
       lv_obj_set_style_text_color(empty, lv_color_hex(0xDCE7F5), 0);
       lv_obj_set_style_text_font(empty, &lv_font_montserrat_14, 0);
+      lv_obj_set_style_pad_left(empty, 10, 0);
+      lv_obj_set_style_pad_top(empty, 6, 0);
     }
   }
 
