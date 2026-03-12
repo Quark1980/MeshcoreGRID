@@ -1,6 +1,8 @@
 #include "WindowManager.h"
 
 #include <algorithm>
+#include <cctype>
+#include <ctime>
 #include <cstring>
 #include <vector>
 
@@ -35,8 +37,31 @@ lv_color_t senderColor(const char* sender) {
   return lv_color_hex(palette[hash % (sizeof(palette) / sizeof(palette[0]))]);
 }
 
+std::string normalizedChannelName(const std::string& name) {
+  size_t start = 0;
+  while (start < name.size() && std::isspace(static_cast<unsigned char>(name[start])) != 0) {
+    start++;
+  }
+
+  size_t end = name.size();
+  while (end > start && std::isspace(static_cast<unsigned char>(name[end - 1])) != 0) {
+    end--;
+  }
+
+  std::string out = name.substr(start, end - start);
+  std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return out;
+}
+
 class MessengerManagerApp : public MeshApp {
 public:
+  enum class ContactSortMode {
+    LastSeen,
+    Name,
+  };
+
   struct RowBinding {
     lv_obj_t* row;
     uint32_t id;
@@ -58,6 +83,7 @@ public:
         _header(nullptr),
         _content(nullptr),
         _backBtn(nullptr),
+        _contactSortBtn(nullptr),
         _title(nullptr),
         _tabview(nullptr),
         _channelsList(nullptr),
@@ -70,8 +96,11 @@ public:
         _threadId(0),
         _threadPrivate(false),
         _contactsLoaded(false),
-        _lastRefresh(0) {
+        _lastRefresh(0),
+        _lastContactLongPressMs(0),
+        _contactSortMode(ContactSortMode::LastSeen) {
     _rowBindings.reserve(96);
+      _visibleContacts.reserve(64);
   }
 
   void release() override {
@@ -133,8 +162,57 @@ private:
     if (ts == 0) {
       return "unknown";
     }
-    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(ts));
+
+    const uint32_t now = static_cast<uint32_t>(time(nullptr));
+    if (now == 0 || now < ts) {
+      return "unknown";
+    }
+
+    const uint32_t age = now - ts;
+    if (age < 60) {
+      snprintf(buf, sizeof(buf), "%lus", static_cast<unsigned long>(age));
+    } else if (age < 3600) {
+      snprintf(buf, sizeof(buf), "%lum", static_cast<unsigned long>(age / 60));
+    } else if (age < 86400) {
+      snprintf(buf, sizeof(buf), "%luh", static_cast<unsigned long>(age / 3600));
+    } else {
+      snprintf(buf, sizeof(buf), "%lud", static_cast<unsigned long>(age / 86400));
+    }
     return buf;
+  }
+
+  static const char* formatClockTime(uint32_t ts) {
+    static char buf[16];
+    if (ts == 0) {
+      return "--:--:--";
+    }
+
+    time_t raw = static_cast<time_t>(ts);
+    struct tm t;
+    if (localtime_r(&raw, &t) == nullptr) {
+      return "--:--:--";
+    }
+
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    return buf;
+  }
+
+  static void onContactLongPressed(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr) {
+      return;
+    }
+
+    lv_obj_t* row = lv_event_get_target(e);
+    for (const auto& binding : self->_rowBindings) {
+      if (binding.row != row || !binding.isPrivate) {
+        continue;
+      }
+
+      self->_lastContactLongPressMs = millis();
+      self->showContactDetails(binding.id);
+      return;
+    }
   }
 
   static void onThreadSelected(lv_event_t* e) {
@@ -150,6 +228,10 @@ private:
       }
 
       if (binding.isPrivate) {
+        const uint32_t now = millis();
+        if (now - self->_lastContactLongPressMs < 800) {
+          return;
+        }
         self->MapsToThread(binding.id, true);
       } else {
         self->loadChatThread(static_cast<uint8_t>(binding.id & 0xFFu), false);
@@ -197,10 +279,128 @@ private:
     }
 
     uint16_t tab = lv_tabview_get_tab_act(self->_tabview);
-    if (tab == 1 && !self->_contactsLoaded) {
-      self->refreshContactList();
-      self->_contactsLoaded = true;
+    if (tab == 1) {
+      if (self->_contactSortBtn != nullptr) {
+        lv_obj_clear_flag(self->_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
+      }
+      WindowManager::instance().setRightNavAction(LV_SYMBOL_SETTINGS " Sort", [self]() { self->openContactSortDialog(); });
+      if (!self->_contactsLoaded) {
+        self->refreshContactList();
+        self->_contactsLoaded = true;
+      }
+    } else if (self->_contactSortBtn != nullptr) {
+      lv_obj_add_flag(self->_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
+      WindowManager::instance().resetRightNavAction();
     }
+  }
+
+  static bool contactNameLess(const MeshBridge::ContactSummary& a, const MeshBridge::ContactSummary& b) {
+    std::string an = normalizedChannelName(a.name);
+    std::string bn = normalizedChannelName(b.name);
+    if (an == bn) {
+      return a.id < b.id;
+    }
+    return an < bn;
+  }
+
+  static void onContactSortDialog(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr) {
+      return;
+    }
+
+    lv_obj_t* dialog = lv_event_get_target(e);
+    const char* choice = lv_msgbox_get_active_btn_text(dialog);
+    if (choice != nullptr) {
+      bool changed = false;
+      if (strcmp(choice, "Name") == 0) {
+        self->_contactSortMode = ContactSortMode::Name;
+        changed = true;
+      } else if (strcmp(choice, "Recent") == 0) {
+        self->_contactSortMode = ContactSortMode::LastSeen;
+        changed = true;
+      }
+      if (changed) {
+        // Defer the refresh to the next event-loop tick so we don't call
+        // lv_obj_clean / object-create inside the msgbox VALUE_CHANGED event
+        // callback — that deep nesting causes heap/stack corruption on ESP32.
+        lv_async_call([](void* ud) {
+          static_cast<MessengerManagerApp*>(ud)->refreshContactList();
+        }, self);
+      }
+    }
+    lv_msgbox_close(dialog);
+  }
+
+  static void onContactSortClicked(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr) {
+      return;
+    }
+
+    self->openContactSortDialog();
+  }
+
+  void openContactSortDialog() {
+    if (_inThread) {
+      return;
+    }
+
+    static const char* buttons[] = {"Recent", "Name", ""};
+    lv_obj_t* msg = lv_msgbox_create(nullptr, "Sort", "Order contacts by:", buttons, true);
+    lv_obj_set_width(msg, LV_PCT(80));
+    lv_obj_center(msg);
+    lv_obj_add_event_cb(msg, onContactSortDialog, LV_EVENT_VALUE_CHANGED, this);
+  }
+
+  const MeshBridge::ContactSummary* findVisibleContact(uint32_t id) const {
+    for (const auto& contact : _visibleContacts) {
+      if (contact.id == id) {
+        return &contact;
+      }
+    }
+    return nullptr;
+  }
+
+  void showContactDetails(uint32_t contactId) {
+    const MeshBridge::ContactSummary* contact = findVisibleContact(contactId);
+    if (contact == nullptr || _bridge == nullptr) {
+      return;
+    }
+
+    char latText[24];
+    char lonText[24];
+    if (contact->gpsLat == 0 && contact->gpsLon == 0) {
+      snprintf(latText, sizeof(latText), "unknown");
+      snprintf(lonText, sizeof(lonText), "unknown");
+    } else {
+      snprintf(latText, sizeof(latText), "%.6f", static_cast<double>(contact->gpsLat) / 1000000.0);
+      snprintf(lonText, sizeof(lonText), "%.6f", static_cast<double>(contact->gpsLon) / 1000000.0);
+    }
+
+    char details[900];
+    snprintf(details,
+             sizeof(details),
+             "Name: %s\nAddress: 0x%08lX\nPublic key: %s\nLast heard: %s ago\nLast seen (local epoch): %lu\nAdvert timestamp (remote epoch): %lu\nPosition: lat %s, lon %s\nType: %u\nFlags: 0x%02X\nOut path len: %u\nSync since: %lu\nRecently heard: %s\nUnread: %d",
+             contact->name.c_str(),
+             static_cast<unsigned long>(contact->id),
+             contact->publicKeyHex.empty() ? "unknown" : contact->publicKeyHex.c_str(),
+             relativeAge(contact->lastSeen),
+             static_cast<unsigned long>(contact->lastSeen),
+             static_cast<unsigned long>(contact->lastAdvertTimestamp),
+             latText,
+             lonText,
+             static_cast<unsigned>(contact->type),
+             static_cast<unsigned>(contact->flags),
+             static_cast<unsigned>(contact->outPathLen),
+             static_cast<unsigned long>(contact->syncSince),
+             contact->heardRecently ? "yes" : "no",
+             _bridge->getUnreadCount(contact->id, true));
+
+    static const char* buttons[] = {"Close", ""};
+    lv_obj_t* msg = lv_msgbox_create(nullptr, "Contact details", details, buttons, true);
+    lv_obj_set_width(msg, LV_PCT(88));
+    lv_obj_center(msg);
   }
 
   void buildShell() {
@@ -223,6 +423,17 @@ private:
     lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
     lv_obj_center(backLabel);
 
+    _contactSortBtn = lv_btn_create(_header);
+    lv_obj_set_size(_contactSortBtn, 74, 30);
+    lv_obj_align(_contactSortBtn, LV_ALIGN_RIGHT_MID, -4, 0);
+    lv_obj_set_style_bg_color(_contactSortBtn, lv_color_hex(0x1B2530), 0);
+    lv_obj_add_event_cb(_contactSortBtn, onContactSortClicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t* sortLabel = lv_label_create(_contactSortBtn);
+    lv_label_set_text(sortLabel, LV_SYMBOL_SETTINGS " Sort");
+    lv_obj_center(sortLabel);
+
     _title = lv_label_create(_header);
     lv_obj_set_style_text_font(_title, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(_title, lv_color_hex(0xE8EFF7), 0);
@@ -239,6 +450,9 @@ private:
     lv_obj_set_style_pad_right(_content, 0, 0);
     lv_obj_set_style_pad_bottom(_content, 0, 0);
     lv_obj_clear_flag(_content, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Keep header controls touchable above tab/content layers.
+    lv_obj_move_foreground(_header);
   }
 
   void clearContent() {
@@ -432,6 +646,8 @@ private:
 
     clearContent();
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
+    WindowManager::instance().resetRightNavAction();
     lv_label_set_text(_title, "Messenger");
 
     _tabview = lv_tabview_create(_content, LV_DIR_TOP, 44);
@@ -506,7 +722,8 @@ private:
       if (shown >= kMaxRows) {
         break;
       }
-      if (channel.name.empty()) {
+      const std::string normalizedName = normalizedChannelName(channel.name);
+      if (normalizedName.empty() || normalizedName == "channel") {
         skipped++;
         continue;
       }
@@ -552,7 +769,19 @@ private:
 
     lv_obj_clean(_contactsList);
     _rowBindings.clear();
+    _visibleContacts.clear();
     auto contacts = _bridge->getContacts();
+
+    if (_contactSortMode == ContactSortMode::Name) {
+      std::sort(contacts.begin(), contacts.end(), contactNameLess);
+    } else {
+      std::sort(contacts.begin(), contacts.end(), [](const MeshBridge::ContactSummary& a, const MeshBridge::ContactSummary& b) {
+        if (a.lastSeen == b.lastSeen) {
+          return contactNameLess(a, b);
+        }
+        return a.lastSeen > b.lastSeen;
+      });
+    }
 
     if (contacts.empty()) {
       lv_obj_t* t = lv_list_add_text(_contactsList, "No contacts in routing table");
@@ -566,14 +795,37 @@ private:
       if (shown >= kMaxRows) {
         break;
       }
-      char label[92];
-      snprintf(label, sizeof(label), "%s  ·  Last seen %s", contact.name.c_str(), relativeAge(contact.lastSeen));
-
-      lv_obj_t* row = lv_list_add_btn(_contactsList, LV_SYMBOL_LIST, label);
+      // Use a plain container instead of lv_list_add_btn so no inherited
+      // lv_btn / list-button theme styles fight with our flex layout.
+      lv_obj_t* row = lv_obj_create(_contactsList);
+      lv_obj_remove_style_all(row);
+      lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_add_flag(row, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+      lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
       lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
-      lv_obj_set_style_border_width(row, 0, 0);
-      lv_obj_set_style_text_color(row, lv_color_hex(0xEDF4FF), 0);
-      lv_obj_set_style_text_font(row, &lv_font_montserrat_14, 0);
+      lv_obj_set_style_bg_color(row, lv_color_hex(0x253447), LV_STATE_PRESSED);
+      lv_obj_set_style_pad_left(row, 12, 0);
+      lv_obj_set_style_pad_right(row, 12, 0);
+      lv_obj_set_style_pad_top(row, 10, 0);
+      lv_obj_set_style_pad_bottom(row, 10, 0);
+      lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+      lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+      lv_obj_t* nameLabel = lv_label_create(row);
+      lv_label_set_text(nameLabel, contact.name.c_str());
+      lv_label_set_long_mode(nameLabel, LV_LABEL_LONG_CLIP);
+      lv_obj_set_flex_grow(nameLabel, 1);
+      lv_obj_set_style_text_align(nameLabel, LV_TEXT_ALIGN_LEFT, 0);
+      lv_obj_set_style_text_color(nameLabel, lv_color_hex(0xEDF4FF), 0);
+      lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_14, 0);
+
+      lv_obj_t* timeLabel = lv_label_create(row);
+      lv_label_set_text(timeLabel, formatClockTime(contact.lastSeen));
+      lv_obj_set_width(timeLabel, 72);
+      lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_RIGHT, 0);
+      lv_obj_set_style_text_color(timeLabel, lv_color_hex(0xAFC2D8), 0);
+      lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_14, 0);
 
       if (contact.heardRecently) {
         lv_obj_set_style_border_color(row, lv_color_hex(0x27D468), 0);
@@ -581,7 +833,9 @@ private:
       }
 
       _rowBindings.push_back({row, contact.id, true});
+      _visibleContacts.push_back(contact);
       lv_obj_add_event_cb(row, onThreadSelected, LV_EVENT_CLICKED, this);
+      lv_obj_add_event_cb(row, onContactLongPressed, LV_EVENT_LONG_PRESSED, this);
       shown++;
     }
 
@@ -743,6 +997,7 @@ private:
     clearContent();
     lv_obj_update_layout(_content);
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(_contactSortBtn, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(_title, isPrivate ? "Direct Chat" : "Channel Chat");
     WindowManager::instance().setRightNavAction(LV_SYMBOL_EDIT " Write", [this]() { showComposer(); });
 
@@ -825,6 +1080,7 @@ private:
   lv_obj_t* _header;
   lv_obj_t* _content;
   lv_obj_t* _backBtn;
+  lv_obj_t* _contactSortBtn;
   lv_obj_t* _title;
 
   lv_obj_t* _tabview;
@@ -840,7 +1096,10 @@ private:
   bool _threadPrivate;
   bool _contactsLoaded;
   uint32_t _lastRefresh;
+  uint32_t _lastContactLongPressMs;
+  ContactSortMode _contactSortMode;
   std::vector<RowBinding> _rowBindings;
+  std::vector<MeshBridge::ContactSummary> _visibleContacts;
   std::vector<PendingEchoBubble> _pendingEchoes;
 };
 
