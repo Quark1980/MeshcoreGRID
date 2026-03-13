@@ -54,6 +54,9 @@ public:
       lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
       lv_obj_set_style_border_color(card, lv_color_hex(0x2E3642), 0);
       lv_obj_set_style_border_width(card, 1, 0);
+      lv_obj_set_style_translate_y(card, 0, 0);
+      lv_obj_set_style_shadow_width(card, 0, 0);
+      lv_obj_set_style_shadow_opa(card, LV_OPA_TRANSP, 0);
 
       lv_obj_t* icon = lv_label_create(card);
       lv_label_set_text(icon, apps[i].icon ? apps[i].icon : "*");
@@ -76,6 +79,9 @@ public:
           WindowManager::instance().openApp(id, true);
         }
       }, LV_EVENT_CLICKED, (void*)apps[i].id);
+      lv_obj_add_event_cb(card, onCardPressed, LV_EVENT_PRESSED, nullptr);
+      lv_obj_add_event_cb(card, onCardReleased, LV_EVENT_RELEASED, nullptr);
+      lv_obj_add_event_cb(card, onCardReleased, LV_EVENT_PRESS_LOST, nullptr);
       ++visibleIdx;
     }
   }
@@ -93,6 +99,39 @@ public:
   }
 
 private:
+  static void applyPressedVisual(lv_obj_t* card, bool pressed) {
+    if (card == nullptr) {
+      return;
+    }
+
+    if (pressed) {
+      lv_obj_set_style_bg_color(card, lv_color_hex(0x243244), 0);
+      lv_obj_set_style_border_color(card, lv_color_hex(0xFFB300), 0);
+      lv_obj_set_style_border_width(card, 2, 0);
+      lv_obj_set_style_translate_y(card, 2, 0);
+      lv_obj_set_style_shadow_width(card, 12, 0);
+      lv_obj_set_style_shadow_color(card, lv_color_hex(0xFFB300), 0);
+      lv_obj_set_style_shadow_opa(card, LV_OPA_30, 0);
+    } else {
+      lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
+      lv_obj_set_style_border_color(card, lv_color_hex(0x2E3642), 0);
+      lv_obj_set_style_border_width(card, 1, 0);
+      lv_obj_set_style_translate_y(card, 0, 0);
+      lv_obj_set_style_shadow_width(card, 0, 0);
+      lv_obj_set_style_shadow_opa(card, LV_OPA_TRANSP, 0);
+    }
+  }
+
+  static void onCardPressed(lv_event_t* e) {
+    lv_obj_t* card = lv_event_get_target(e);
+    applyPressedVisual(card, true);
+  }
+
+  static void onCardReleased(lv_event_t* e) {
+    lv_obj_t* card = lv_event_get_target(e);
+    applyPressedVisual(card, false);
+  }
+
   void createChatBadge(lv_obj_t* card) {
     _chatBadge = lv_obj_create(card);
     lv_obj_set_size(_chatBadge, 20, 20);

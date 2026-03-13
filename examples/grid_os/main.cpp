@@ -420,24 +420,27 @@ void uiTask(void*) {
 
 void showSplash() {
   lv_obj_t* scr = lv_scr_act();
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0x060A10), 0);
-  lv_obj_set_style_bg_grad_color(scr, lv_color_hex(0x0E1A2A), 0);
-  lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_t* splash = lv_obj_create(scr);
+  lv_obj_remove_style_all(splash);
+  lv_obj_set_size(splash, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(splash, lv_color_hex(0x060A10), 0);
+  lv_obj_set_style_bg_grad_color(splash, lv_color_hex(0x0E1A2A), 0);
+  lv_obj_set_style_bg_grad_dir(splash, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(splash, LV_OPA_COVER, 0);
 
-  lv_obj_t* title = lv_label_create(scr);
+  lv_obj_t* title = lv_label_create(splash);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_48, 0);
   lv_obj_set_style_text_color(title, lv_color_hex(0xF2FAFF), 0);
   lv_label_set_text(title, "GRID");
   lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
 
-  lv_obj_t* tagline = lv_label_create(scr);
+  lv_obj_t* tagline = lv_label_create(splash);
   lv_obj_set_style_text_color(tagline, lv_color_hex(0x78CFFF), 0);
   lv_obj_set_style_text_font(tagline, &lv_font_montserrat_14, 0);
   lv_label_set_text(tagline, "Mesh network initializing");
   lv_obj_align(tagline, LV_ALIGN_TOP_MID, 0, 68);
 
-  lv_obj_t* net = lv_obj_create(scr);
+  lv_obj_t* net = lv_obj_create(splash);
   lv_obj_remove_style_all(net);
   lv_obj_set_size(net, 260, 150);
   lv_obj_align(net, LV_ALIGN_CENTER, 0, 14);
@@ -492,7 +495,7 @@ void showSplash() {
 
   static const uint8_t kPath[] = {0, 1, 2, 4, 5, 6, 0};
 
-  lv_obj_t* version = lv_label_create(scr);
+  lv_obj_t* version = lv_label_create(splash);
   lv_obj_set_style_text_color(version, lv_color_hex(0x79D6FF), 0);
   lv_obj_set_style_text_font(version, &lv_font_montserrat_20, 0);
   char versionText[40];
@@ -500,7 +503,7 @@ void showSplash() {
   lv_label_set_text(version, versionText);
   lv_obj_align(version, LV_ALIGN_BOTTOM_MID, 0, -48);
 
-  lv_obj_t* author = lv_label_create(scr);
+  lv_obj_t* author = lv_label_create(splash);
   lv_obj_set_style_text_color(author, lv_color_hex(0xDCE7F5), 0);
   lv_obj_set_style_text_font(author, &lv_font_montserrat_14, 0);
   char authorText[64];
@@ -508,7 +511,7 @@ void showSplash() {
   lv_label_set_text(author, authorText);
   lv_obj_align(author, LV_ALIGN_BOTTOM_MID, 0, -28);
 
-  lv_obj_t* sub = lv_label_create(scr);
+  lv_obj_t* sub = lv_label_create(splash);
   lv_obj_set_style_text_color(sub, lv_color_hex(0x8EA0B4), 0);
   lv_label_set_text(sub, "powered by MeshCore 1.14");
   lv_obj_align(sub, LV_ALIGN_BOTTOM_MID, 0, -10);
@@ -546,6 +549,10 @@ void showSplash() {
     lv_timer_handler();
     delay(10);
   }
+
+  lv_obj_del(splash);
+  lv_obj_invalidate(scr);
+  lv_refr_now(nullptr);
 }
 }
 
