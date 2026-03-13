@@ -30,6 +30,16 @@ Credits:
 - Massive thanks to the MeshCore maintainers and contributors.
 - This GRID project would not exist without their protocol, routing, radio, storage, and device support foundation.
 
+
+## Screen Pin Connections (Heltec V4 TFT)
+
+| Signal | Pin |
+|--------|-----|
+| SDA    | 5   |
+| SCL    | 6   |
+| RST    | 41  |
+| Touch Controller | FT6336 (I2C addr 0x38) |
+
 ## Supported GRID Target
 
 - `heltec_v4_tft_grid_os_ble`
