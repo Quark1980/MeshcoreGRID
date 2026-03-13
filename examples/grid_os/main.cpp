@@ -420,14 +420,76 @@ void uiTask(void*) {
 
 void showSplash() {
   lv_obj_t* scr = lv_scr_act();
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0x080C12), 0);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(0x060A10), 0);
+  lv_obj_set_style_bg_grad_color(scr, lv_color_hex(0x0E1A2A), 0);
+  lv_obj_set_style_bg_grad_dir(scr, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
   lv_obj_t* title = lv_label_create(scr);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_48, 0);
-  lv_obj_set_style_text_color(title, lv_color_hex(0xF4FBFF), 0);
+  lv_obj_set_style_text_color(title, lv_color_hex(0xF2FAFF), 0);
   lv_label_set_text(title, "GRID");
-  lv_obj_align(title, LV_ALIGN_CENTER, 0, -44);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
+
+  lv_obj_t* tagline = lv_label_create(scr);
+  lv_obj_set_style_text_color(tagline, lv_color_hex(0x78CFFF), 0);
+  lv_obj_set_style_text_font(tagline, &lv_font_montserrat_14, 0);
+  lv_label_set_text(tagline, "Mesh network initializing");
+  lv_obj_align(tagline, LV_ALIGN_TOP_MID, 0, 68);
+
+  lv_obj_t* net = lv_obj_create(scr);
+  lv_obj_remove_style_all(net);
+  lv_obj_set_size(net, 260, 150);
+  lv_obj_align(net, LV_ALIGN_CENTER, 0, 14);
+
+  static const lv_point_t kNodes[] = {
+    {22, 70}, {70, 28}, {124, 58}, {182, 34}, {232, 74}, {170, 112}, {92, 116}
+  };
+  static const uint8_t kEdges[][2] = {
+    {0,1}, {1,2}, {2,3}, {3,4}, {2,4}, {2,5}, {5,6}, {6,0}, {1,6}
+  };
+  static lv_point_t kEdgePts[9][2];
+
+  lv_obj_t* links[9] = {nullptr};
+  for (uint8_t i = 0; i < 9; ++i) {
+    kEdgePts[i][0] = kNodes[kEdges[i][0]];
+    kEdgePts[i][1] = kNodes[kEdges[i][1]];
+    links[i] = lv_line_create(net);
+    lv_line_set_points(links[i], kEdgePts[i], 2);
+    lv_obj_set_style_line_color(links[i], lv_color_hex(0x1F5D85), 0);
+    lv_obj_set_style_line_width(links[i], 2, 0);
+    lv_obj_set_style_line_opa(links[i], LV_OPA_40, 0);
+    lv_obj_center(links[i]);
+  }
+
+  lv_obj_t* nodes[7] = {nullptr};
+  lv_obj_t* halos[7] = {nullptr};
+  for (uint8_t i = 0; i < 7; ++i) {
+    halos[i] = lv_obj_create(net);
+    lv_obj_remove_style_all(halos[i]);
+    lv_obj_set_size(halos[i], 22, 22);
+    lv_obj_set_style_radius(halos[i], LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(halos[i], lv_color_hex(0x39B8FF), 0);
+    lv_obj_set_style_bg_opa(halos[i], LV_OPA_10, 0);
+    lv_obj_align(halos[i], LV_ALIGN_TOP_LEFT, kNodes[i].x - 11, kNodes[i].y - 11);
+
+    nodes[i] = lv_obj_create(net);
+    lv_obj_remove_style_all(nodes[i]);
+    lv_obj_set_size(nodes[i], 10, 10);
+    lv_obj_set_style_radius(nodes[i], LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(nodes[i], lv_color_hex(0x8FD6FF), 0);
+    lv_obj_set_style_bg_opa(nodes[i], LV_OPA_COVER, 0);
+    lv_obj_align(nodes[i], LV_ALIGN_TOP_LEFT, kNodes[i].x - 5, kNodes[i].y - 5);
+  }
+
+  lv_obj_t* packet = lv_obj_create(net);
+  lv_obj_remove_style_all(packet);
+  lv_obj_set_size(packet, 8, 8);
+  lv_obj_set_style_radius(packet, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(packet, lv_color_hex(0xFFD166), 0);
+  lv_obj_set_style_bg_opa(packet, LV_OPA_COVER, 0);
+
+  static const uint8_t kPath[] = {0, 1, 2, 4, 5, 6, 0};
 
   lv_obj_t* version = lv_label_create(scr);
   lv_obj_set_style_text_color(version, lv_color_hex(0x79D6FF), 0);
@@ -435,23 +497,50 @@ void showSplash() {
   char versionText[40];
   snprintf(versionText, sizeof(versionText), "Version %s", kGridVersion);
   lv_label_set_text(version, versionText);
-  lv_obj_align(version, LV_ALIGN_CENTER, 0, 8);
+  lv_obj_align(version, LV_ALIGN_BOTTOM_MID, 0, -48);
 
   lv_obj_t* author = lv_label_create(scr);
   lv_obj_set_style_text_color(author, lv_color_hex(0xDCE7F5), 0);
-  lv_obj_set_style_text_font(author, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_font(author, &lv_font_montserrat_14, 0);
   char authorText[64];
   snprintf(authorText, sizeof(authorText), "Author: %s", kGridAuthor);
   lv_label_set_text(author, authorText);
-  lv_obj_align(author, LV_ALIGN_CENTER, 0, 34);
+  lv_obj_align(author, LV_ALIGN_BOTTOM_MID, 0, -28);
 
   lv_obj_t* sub = lv_label_create(scr);
   lv_obj_set_style_text_color(sub, lv_color_hex(0x8EA0B4), 0);
   lv_label_set_text(sub, "powered by MeshCore 1.14");
-  lv_obj_align(sub, LV_ALIGN_CENTER, 0, 60);
+  lv_obj_align(sub, LV_ALIGN_BOTTOM_MID, 0, -10);
 
   uint32_t t0 = millis();
-  while (millis() - t0 < 300) {
+  while (millis() - t0 < 1200) {
+    const uint32_t elapsed = millis() - t0;
+
+    for (uint8_t i = 0; i < 7; ++i) {
+      const uint32_t phase = (elapsed + i * 120) % 700;
+      const lv_opa_t haloOpa = static_cast<lv_opa_t>(12 + (phase < 350 ? phase / 10 : (700 - phase) / 10));
+      lv_obj_set_style_bg_opa(halos[i], haloOpa, 0);
+
+      const lv_color_t nodeColor = (phase < 180) ? lv_color_hex(0xD7F1FF) : lv_color_hex(0x8FD6FF);
+      lv_obj_set_style_bg_color(nodes[i], nodeColor, 0);
+    }
+
+    for (uint8_t i = 0; i < 9; ++i) {
+      const uint32_t phase = (elapsed + i * 80) % 500;
+      const lv_opa_t opa = static_cast<lv_opa_t>(35 + (phase < 250 ? phase / 8 : (500 - phase) / 8));
+      lv_obj_set_style_line_opa(links[i], opa, 0);
+    }
+
+    const uint32_t segMs = 170;
+    const uint8_t segCount = static_cast<uint8_t>(sizeof(kPath) - 1);
+    const uint32_t routePos = (elapsed / segMs) % segCount;
+    const uint32_t inSeg = elapsed % segMs;
+    const lv_point_t& a = kNodes[kPath[routePos]];
+    const lv_point_t& b = kNodes[kPath[routePos + 1]];
+    const int16_t px = static_cast<int16_t>(a.x + ((b.x - a.x) * static_cast<int32_t>(inSeg)) / static_cast<int32_t>(segMs));
+    const int16_t py = static_cast<int16_t>(a.y + ((b.y - a.y) * static_cast<int32_t>(inSeg)) / static_cast<int32_t>(segMs));
+    lv_obj_align(packet, LV_ALIGN_TOP_LEFT, px - 4, py - 4);
+
     lv_tick_inc(10);
     lv_timer_handler();
     delay(10);
