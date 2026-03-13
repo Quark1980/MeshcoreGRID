@@ -83,9 +83,4 @@
 #define LV_USE_LOG   1
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 
-// UI performance tuning for MeshcoreGRID
-#define LV_INDEV_DEF_READ_PERIOD 20
-#define LV_DISP_DEF_REFR_PERIOD 30
-#define LV_TICK_CUSTOM 1
-
 #endif /* LV_CONF_H */
