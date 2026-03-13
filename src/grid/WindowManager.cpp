@@ -12,8 +12,32 @@ constexpr bool kEnableFullscreenSlideAnimation = false;
 constexpr uint32_t COLOR_BG = 0x101318;
 constexpr uint32_t COLOR_SURFACE = 0x1A1F27;
 constexpr uint32_t COLOR_ACCENT = 0x66D9EF;
+constexpr uint32_t COLOR_AMBER = 0xFFB300;
 constexpr uint32_t COLOR_TEXT = 0xE2E8F0;
 constexpr uint32_t COLOR_DIM = 0x7C8799;
+
+void applyAmberButtonOutlineRecursive(lv_obj_t* root) {
+  if (root == nullptr) {
+    return;
+  }
+
+  if (lv_obj_check_type(root, &lv_btn_class)) {
+    // Force high-contrast amber button outlines across the whole UI.
+    lv_obj_set_style_border_color(root, lv_color_hex(COLOR_AMBER), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(root, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(root, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_border_color(root, lv_color_hex(COLOR_AMBER), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_opa(root, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(root, 3, LV_PART_MAIN | LV_STATE_PRESSED);
+  }
+
+  const uint32_t childCount = lv_obj_get_child_cnt(root);
+  for (uint32_t i = 0; i < childCount; ++i) {
+    lv_obj_t* child = lv_obj_get_child(root, i);
+    applyAmberButtonOutlineRecursive(child);
+  }
+}
 }
 
 WindowManager& WindowManager::instance() {
@@ -54,7 +78,13 @@ void WindowManager::tick() {
     _activeApp->onLoop();
   }
 
+  static uint32_t sLastButtonStylePassMs = 0;
   const uint32_t now = millis();
+  if (_root != nullptr && (now - sLastButtonStylePassMs) >= 250) {
+    sLastButtonStylePassMs = now;
+    applyAmberButtonOutlineRecursive(_root);
+  }
+
   if (_statusBatteryLabel != nullptr && (now - _lastBatteryUpdateMs) >= 5000) {
     _lastBatteryUpdateMs = now;
     const uint16_t battMv = board.getBattMilliVolts();
@@ -186,6 +216,7 @@ void WindowManager::buildShell(lv_obj_t* root) {
 
   buildStatusBar();
   buildNavigationBar();
+  applyAmberButtonOutlineRecursive(root);
 }
 
 void WindowManager::buildStatusBar() {

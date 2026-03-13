@@ -456,10 +456,11 @@ void showSplash() {
     kEdgePts[i][1] = kNodes[kEdges[i][1]];
     links[i] = lv_line_create(net);
     lv_line_set_points(links[i], kEdgePts[i], 2);
-    lv_obj_set_style_line_color(links[i], lv_color_hex(0x1F5D85), 0);
-    lv_obj_set_style_line_width(links[i], 2, 0);
-    lv_obj_set_style_line_opa(links[i], LV_OPA_40, 0);
-    lv_obj_center(links[i]);
+    lv_obj_set_pos(links[i], 0, 0);
+    lv_obj_set_style_line_color(links[i], lv_color_hex(0x7ED7FF), 0);
+    lv_obj_set_style_line_width(links[i], 3, 0);
+    lv_obj_set_style_line_opa(links[i], LV_OPA_80, 0);
+    lv_obj_set_style_line_rounded(links[i], true, 0);
   }
 
   lv_obj_t* nodes[7] = {nullptr};
@@ -475,11 +476,11 @@ void showSplash() {
 
     nodes[i] = lv_obj_create(net);
     lv_obj_remove_style_all(nodes[i]);
-    lv_obj_set_size(nodes[i], 10, 10);
+    lv_obj_set_size(nodes[i], 12, 12);
     lv_obj_set_style_radius(nodes[i], LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(nodes[i], lv_color_hex(0x8FD6FF), 0);
+    lv_obj_set_style_bg_color(nodes[i], lv_color_hex(0xD8F2FF), 0);
     lv_obj_set_style_bg_opa(nodes[i], LV_OPA_COVER, 0);
-    lv_obj_align(nodes[i], LV_ALIGN_TOP_LEFT, kNodes[i].x - 5, kNodes[i].y - 5);
+    lv_obj_align(nodes[i], LV_ALIGN_TOP_LEFT, kNodes[i].x - 6, kNodes[i].y - 6);
   }
 
   lv_obj_t* packet = lv_obj_create(net);
@@ -527,7 +528,7 @@ void showSplash() {
 
     for (uint8_t i = 0; i < 9; ++i) {
       const uint32_t phase = (elapsed + i * 80) % 500;
-      const lv_opa_t opa = static_cast<lv_opa_t>(35 + (phase < 250 ? phase / 8 : (500 - phase) / 8));
+      const lv_opa_t opa = static_cast<lv_opa_t>(120 + (phase < 250 ? phase / 5 : (500 - phase) / 5));
       lv_obj_set_style_line_opa(links[i], opa, 0);
     }
 
