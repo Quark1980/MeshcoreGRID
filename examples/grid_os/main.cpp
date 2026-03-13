@@ -601,13 +601,12 @@ void setup() {
 
 #ifdef BLE_PIN_CODE
   serial_interface.begin(BLE_NAME_PREFIX, the_mesh.getNodePrefs()->node_name, the_mesh.getBLEPin());
-  the_mesh.bindInterface(serial_interface);
-  the_mesh.stopInterface();
-  gBleEnabled = false;
+  the_mesh.startInterface(serial_interface);
+  gBleEnabled = true;
 #else
   serial_interface.begin(Serial);
   the_mesh.startInterface(serial_interface);
-  gBleEnabled = false;
+  gBleEnabled = true;
 #endif
 
   // TFT + LVGL init (UI on Core 1)
