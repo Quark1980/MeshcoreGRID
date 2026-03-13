@@ -242,7 +242,7 @@ private:
       return "unknown";
     }
 
-    const uint32_t now = static_cast<uint32_t>(time(nullptr));
+    const uint32_t now = the_mesh.getRTCClock()->getCurrentTime();
     if (now == 0 || now < ts) {
       return "unknown";
     }
@@ -1040,13 +1040,14 @@ private:
     _rowBindings.clear();
     _visibleContacts.clear();
     auto contacts = _bridge->getContacts();
+    const uint32_t now = the_mesh.getRTCClock()->getCurrentTime();
 
     if (_contactSortMode == ContactSortMode::Name) {
       std::sort(contacts.begin(), contacts.end(), contactNameLess);
     } else {
-      std::sort(contacts.begin(), contacts.end(), [](const MeshBridge::ContactSummary& a, const MeshBridge::ContactSummary& b) {
-        const bool aUnknown = (a.lastSeen == 0);
-        const bool bUnknown = (b.lastSeen == 0);
+      std::sort(contacts.begin(), contacts.end(), [now](const MeshBridge::ContactSummary& a, const MeshBridge::ContactSummary& b) {
+        const bool aUnknown = (a.lastSeen == 0) || (now == 0) || (a.lastSeen > now);
+        const bool bUnknown = (b.lastSeen == 0) || (now == 0) || (b.lastSeen > now);
         if (aUnknown != bUnknown) {
           return bUnknown;
         }
