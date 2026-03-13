@@ -21,11 +21,25 @@ static const char* kKeyboardMapLower[] = {
   "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
 };
 
+static const lv_btnmatrix_ctrl_t kKeyboardCtrlLower[] = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1,
+  2, 1, 1, 1, 1, 1, 1, 1, 2,
+  2, 1, 4, 1, 2
+};
+
 static const char* kKeyboardMapUpper[] = {
   "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
   "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
   "abc", "Z", "X", "C", "V", "B", "N", "M", LV_SYMBOL_BACKSPACE, "\n",
   "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+static const lv_btnmatrix_ctrl_t kKeyboardCtrlUpper[] = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1,
+  2, 1, 1, 1, 1, 1, 1, 1, 2,
+  2, 1, 4, 1, 2
 };
 
 static const char* kKeyboardMapSpecial[] = {
@@ -35,13 +49,20 @@ static const char* kKeyboardMapSpecial[] = {
   "abc", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
 };
 
+static const lv_btnmatrix_ctrl_t kKeyboardCtrlSpecial[] = {
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  2, 1, 1, 1, 1, 1, 1, 2,
+  2, 1, 4, 1, 2
+};
+
 void applyGridKeyboardLayout(lv_obj_t* keyboard) {
   if (keyboard == nullptr) {
     return;
   }
-  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kKeyboardMapLower, nullptr);
-  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kKeyboardMapUpper, nullptr);
-  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_SPECIAL, kKeyboardMapSpecial, nullptr);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kKeyboardMapLower, kKeyboardCtrlLower);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kKeyboardMapUpper, kKeyboardCtrlUpper);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_SPECIAL, kKeyboardMapSpecial, kKeyboardCtrlSpecial);
 }
 
 class NodesApp : public MeshApp {
