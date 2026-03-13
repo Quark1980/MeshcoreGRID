@@ -96,6 +96,8 @@ public:
   const char *getNodeName();
   NodePrefs *getNodePrefs();
   uint32_t getBLEPin();
+  bool createHashtagChannel(const char* rawName, uint8_t& outIdx);
+  bool deleteChannelAt(uint8_t channelIdx);
 
   void loop();
   void handleCmdFrame(size_t len);

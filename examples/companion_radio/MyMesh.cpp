@@ -13,6 +13,74 @@ uint32_t pubKeyPrefixToU32(const uint8_t* key) {
   }
   return id;
 }
+
+bool normalizeHashtagChannelName(const char* rawName, char outName[32]) {
+  if (rawName == nullptr || outName == nullptr) {
+    return false;
+  }
+
+  while (*rawName == ' ' || *rawName == '\t' || *rawName == '\r' || *rawName == '\n') {
+    ++rawName;
+  }
+
+  size_t len = strlen(rawName);
+  while (len > 0) {
+    const char c = rawName[len - 1];
+    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+      break;
+    }
+    --len;
+  }
+
+  if (len == 0) {
+    return false;
+  }
+
+  memset(outName, 0, 32);
+  size_t writePos = 0;
+  if (rawName[0] != '#') {
+    outName[writePos++] = '#';
+  }
+
+  for (size_t i = 0; i < len && writePos < 31; ++i) {
+    const char c = rawName[i];
+    if (c == '\0') {
+      break;
+    }
+    if (writePos == 1 && outName[0] == '#' && c == '#') {
+      continue;
+    }
+    outName[writePos++] = c;
+  }
+
+  if (writePos <= 1) {
+    return false;
+  }
+  outName[writePos] = '\0';
+  return true;
+}
+
+bool isPublicChannelName(const char* name) {
+  if (name == nullptr) {
+    return false;
+  }
+
+  const char* p = name;
+  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+    ++p;
+  }
+
+  char normalized[32] = {0};
+  size_t len = 0;
+  while (*p != '\0' && len < sizeof(normalized) - 1) {
+    normalized[len++] = static_cast<char>(tolower(static_cast<unsigned char>(*p++)));
+  }
+  while (len > 0 && (normalized[len - 1] == ' ' || normalized[len - 1] == '\t' || normalized[len - 1] == '\r' || normalized[len - 1] == '\n')) {
+    normalized[--len] = '\0';
+  }
+
+  return strcmp(normalized, "public") == 0 || strcmp(normalized, "#public") == 0;
+}
 }
 #endif
 
@@ -1031,6 +1099,82 @@ NodePrefs *MyMesh::getNodePrefs() {
 }
 uint32_t MyMesh::getBLEPin() {
   return _active_ble_pin;
+}
+
+bool MyMesh::createHashtagChannel(const char* rawName, uint8_t& outIdx) {
+  outIdx = 0xFF;
+
+  char channelName[32];
+  if (!normalizeHashtagChannelName(rawName, channelName)) {
+    return false;
+  }
+  if (isPublicChannelName(channelName)) {
+    return false;
+  }
+
+  ChannelDetails existing;
+  int freeIdx = -1;
+  for (int i = 1; i < MAX_GROUP_CHANNELS; ++i) {
+    if (!getChannel(i, existing)) {
+      continue;
+    }
+    if (existing.name[0] == '\0') {
+      if (freeIdx < 0) {
+        freeIdx = i;
+      }
+      continue;
+    }
+    if (strcmp(existing.name, channelName) == 0) {
+      outIdx = static_cast<uint8_t>(i);
+      return true;
+    }
+  }
+
+  if (freeIdx < 0) {
+    return false;
+  }
+
+  ChannelDetails details;
+  memset(&details, 0, sizeof(details));
+  StrHelper::strncpy(details.name, channelName, sizeof(details.name));
+
+  uint8_t hash[32];
+  mesh::Utils::sha256(hash,
+                      sizeof(hash),
+                      reinterpret_cast<const uint8_t*>(channelName),
+                      strlen(channelName));
+  memcpy(details.channel.secret, hash, 16);
+
+  if (!setChannel(freeIdx, details)) {
+    return false;
+  }
+
+  saveChannels();
+  outIdx = static_cast<uint8_t>(freeIdx);
+  return true;
+}
+
+bool MyMesh::deleteChannelAt(uint8_t channelIdx) {
+  if (channelIdx == 0 || channelIdx >= MAX_GROUP_CHANNELS) {
+    return false;
+  }
+
+  ChannelDetails details;
+  if (!getChannel(channelIdx, details)) {
+    return false;
+  }
+  if (details.name[0] == '\0' || isPublicChannelName(details.name)) {
+    return false;
+  }
+
+  ChannelDetails emptyDetails;
+  memset(&emptyDetails, 0, sizeof(emptyDetails));
+  if (!setChannel(channelIdx, emptyDetails)) {
+    return false;
+  }
+
+  saveChannels();
+  return true;
 }
 
 bool MyMesh::syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSamples) {

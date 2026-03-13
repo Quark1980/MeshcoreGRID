@@ -6,6 +6,7 @@
 #include <cstring>
 #include <vector>
 
+#include "MyMesh.h"
 #include "Packet.h"
 
 namespace {
@@ -55,6 +56,17 @@ std::string normalizedChannelName(const std::string& name) {
   return out;
 }
 
+bool isPublicChannelAlias(const std::string& normalizedName) {
+  return normalizedName == "public" || normalizedName == "#public";
+}
+
+const char* visibleChannelLabel(const std::string& normalizedName, const std::string& originalName) {
+  if (isPublicChannelAlias(normalizedName)) {
+    return "Public";
+  }
+  return originalName.c_str();
+}
+
 class MessengerManagerApp : public MeshApp {
 public:
   enum class ContactSortMode {
@@ -87,11 +99,15 @@ public:
         _title(nullptr),
         _tabview(nullptr),
         _channelsList(nullptr),
+        _addChannelBtn(nullptr),
         _contactsList(nullptr),
         _threadList(nullptr),
         _composer(nullptr),
         _input(nullptr),
         _sendBtn(nullptr),
+        _channelEditorPanel(nullptr),
+        _channelEditorInput(nullptr),
+        _channelDeletePanel(nullptr),
         _inThread(false),
         _threadId(0),
         _threadPrivate(false),
@@ -127,6 +143,8 @@ public:
 
     WindowManager::instance().resetRightNavAction();
     hideKeyboard();
+    closeChannelEditor();
+    closeDeleteChannelPrompt();
 
     _layout = nullptr;
   }
@@ -222,6 +240,71 @@ private:
       self->_lastContactLongPressMs = millis();
       self->showContactDetails(binding.id);
       return;
+    }
+  }
+
+  static void onChannelLongPressed(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr) {
+      return;
+    }
+
+    lv_obj_t* row = lv_event_get_target(e);
+    for (const auto& binding : self->_rowBindings) {
+      if (binding.row != row || binding.isPrivate) {
+        continue;
+      }
+      self->openDeleteChannelPrompt(static_cast<uint8_t>(binding.id & 0xFFu));
+      return;
+    }
+  }
+
+  static void onAddChannelButton(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->openChannelEditor();
+    }
+  }
+
+  static void onChannelEditorSave(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr || self->_channelEditorInput == nullptr) {
+      return;
+    }
+
+    const char* text = lv_textarea_get_text(self->_channelEditorInput);
+    uint8_t channelIdx = 0xFF;
+    if (the_mesh.createHashtagChannel(text, channelIdx)) {
+      self->closeChannelEditor();
+      self->refreshChannelList();
+    }
+  }
+
+  static void onChannelEditorCancel(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->closeChannelEditor();
+    }
+  }
+
+  static void onDeleteChannelConfirm(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self == nullptr) {
+      return;
+    }
+
+    if (the_mesh.deleteChannelAt(self->_pendingDeleteChannelIdx)) {
+      self->closeDeleteChannelPrompt();
+      self->refreshChannelList();
+      return;
+    }
+    self->closeDeleteChannelPrompt();
+  }
+
+  static void onDeleteChannelCancel(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->closeDeleteChannelPrompt();
     }
   }
 
@@ -659,6 +742,15 @@ private:
     lv_obj_set_style_bg_opa(_channelsList, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(_channelsList, 0, 0);
 
+    _addChannelBtn = lv_btn_create(channelsTab);
+    lv_obj_set_size(_addChannelBtn, 34, 34);
+    lv_obj_align(_addChannelBtn, LV_ALIGN_TOP_RIGHT, -8, 6);
+    lv_obj_set_style_radius(_addChannelBtn, LV_RADIUS_CIRCLE, 0);
+    lv_obj_add_event_cb(_addChannelBtn, onAddChannelButton, LV_EVENT_CLICKED, this);
+    lv_obj_t* addLabel = lv_label_create(_addChannelBtn);
+    lv_label_set_text(addLabel, LV_SYMBOL_PLUS);
+    lv_obj_center(addLabel);
+
     _contactsList = lv_list_create(contactsTab);
     lv_obj_set_size(_contactsList, LV_PCT(100), LV_PCT(100));
     lv_obj_set_style_bg_opa(_contactsList, LV_OPA_TRANSP, 0);
@@ -711,6 +803,7 @@ private:
     constexpr size_t kMaxRows = 64;
     size_t shown = 0;
     size_t skipped = 0;
+    bool publicAliasShown = false;
     for (const auto& channel : channels) {
       if (shown >= kMaxRows) {
         break;
@@ -720,8 +813,17 @@ private:
         skipped++;
         continue;
       }
+
+      if (isPublicChannelAlias(normalizedName)) {
+        if (publicAliasShown) {
+          skipped++;
+          continue;
+        }
+        publicAliasShown = true;
+      }
+
       char label[48];
-      snprintf(label, sizeof(label), "%s", channel.name.c_str());
+      snprintf(label, sizeof(label), "%s", visibleChannelLabel(normalizedName, channel.name));
 
       lv_obj_t* row = lv_list_add_btn(_channelsList, LV_SYMBOL_LIST, label);
       lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
@@ -741,6 +843,7 @@ private:
 
       _rowBindings.push_back({row, channel.id, false});
       lv_obj_add_event_cb(row, onThreadSelected, LV_EVENT_CLICKED, this);
+      lv_obj_add_event_cb(row, onChannelLongPressed, LV_EVENT_LONG_PRESSED, this);
       shown++;
     }
 
@@ -753,6 +856,118 @@ private:
       lv_obj_t* t = lv_list_add_text(_channelsList, more);
       lv_obj_set_style_text_color(t, lv_color_hex(0xDCE7F5), 0);
     }
+  }
+
+  void openChannelEditor() {
+    closeChannelEditor();
+
+    _channelEditorPanel = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(_channelEditorPanel, LV_PCT(92), 170);
+    lv_obj_align(_channelEditorPanel, LV_ALIGN_TOP_MID, 0, 12);
+    lv_obj_set_style_bg_color(_channelEditorPanel, lv_color_hex(0x0F141B), 0);
+    lv_obj_set_style_border_color(_channelEditorPanel, lv_color_hex(0x2D3A4A), 0);
+    lv_obj_set_style_radius(_channelEditorPanel, 12, 0);
+
+    lv_obj_t* title = lv_label_create(_channelEditorPanel);
+    lv_label_set_text(title, "Add Channel");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, 8);
+
+    _channelEditorInput = lv_textarea_create(_channelEditorPanel);
+    lv_obj_set_size(_channelEditorInput, LV_PCT(96), 50);
+    lv_obj_align(_channelEditorInput, LV_ALIGN_TOP_MID, 0, 34);
+    lv_textarea_set_one_line(_channelEditorInput, true);
+    lv_textarea_set_placeholder_text(_channelEditorInput, "#channel");
+
+    lv_obj_t* saveBtn = lv_btn_create(_channelEditorPanel);
+    lv_obj_set_size(saveBtn, 92, 34);
+    lv_obj_align(saveBtn, LV_ALIGN_BOTTOM_LEFT, 12, -10);
+    lv_obj_add_event_cb(saveBtn, onChannelEditorSave, LV_EVENT_CLICKED, this);
+    lv_obj_t* saveLbl = lv_label_create(saveBtn);
+    lv_label_set_text(saveLbl, "Add");
+    lv_obj_center(saveLbl);
+
+    lv_obj_t* cancelBtn = lv_btn_create(_channelEditorPanel);
+    lv_obj_set_size(cancelBtn, 92, 34);
+    lv_obj_align(cancelBtn, LV_ALIGN_BOTTOM_RIGHT, -12, -10);
+    lv_obj_add_event_cb(cancelBtn, onChannelEditorCancel, LV_EVENT_CLICKED, this);
+    lv_obj_t* cancelLbl = lv_label_create(cancelBtn);
+    lv_label_set_text(cancelLbl, "Cancel");
+    lv_obj_center(cancelLbl);
+
+    ensureGlobalKeyboard();
+    if (gKeyboard != nullptr) {
+      gKeyboardTarget = _channelEditorInput;
+      lv_keyboard_set_textarea(gKeyboard, _channelEditorInput);
+      lv_keyboard_set_mode(gKeyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+      lv_obj_clear_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(gKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
+  }
+
+  void closeChannelEditor() {
+    if (gKeyboard != nullptr && gKeyboardTarget == _channelEditorInput) {
+      lv_keyboard_set_textarea(gKeyboard, nullptr);
+      lv_obj_add_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
+      gKeyboardTarget = nullptr;
+    }
+    if (_channelEditorPanel != nullptr) {
+      lv_obj_del(_channelEditorPanel);
+      _channelEditorPanel = nullptr;
+    }
+    _channelEditorInput = nullptr;
+  }
+
+  void openDeleteChannelPrompt(uint8_t channelIdx) {
+    ChannelDetails details;
+    if (!the_mesh.getChannel(channelIdx, details)) {
+      return;
+    }
+    if (details.name[0] == '\0' || isPublicChannelAlias(normalizedChannelName(details.name))) {
+      return;
+    }
+
+    closeDeleteChannelPrompt();
+    _pendingDeleteChannelIdx = channelIdx;
+
+    _channelDeletePanel = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(_channelDeletePanel, LV_PCT(88), 140);
+    lv_obj_align(_channelDeletePanel, LV_ALIGN_CENTER, 0, -20);
+    lv_obj_set_style_bg_color(_channelDeletePanel, lv_color_hex(0x0F141B), 0);
+    lv_obj_set_style_border_color(_channelDeletePanel, lv_color_hex(0x2D3A4A), 0);
+    lv_obj_set_style_radius(_channelDeletePanel, 12, 0);
+
+    char prompt[96];
+    snprintf(prompt, sizeof(prompt), "Delete channel %s?", details.name);
+    lv_obj_t* label = lv_label_create(_channelDeletePanel);
+    lv_label_set_text(label, prompt);
+    lv_obj_set_width(label, LV_PCT(90));
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 16);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t* deleteBtn = lv_btn_create(_channelDeletePanel);
+    lv_obj_set_size(deleteBtn, 96, 34);
+    lv_obj_align(deleteBtn, LV_ALIGN_BOTTOM_LEFT, 12, -10);
+    lv_obj_add_event_cb(deleteBtn, onDeleteChannelConfirm, LV_EVENT_CLICKED, this);
+    lv_obj_t* deleteLbl = lv_label_create(deleteBtn);
+    lv_label_set_text(deleteLbl, "Delete");
+    lv_obj_center(deleteLbl);
+
+    lv_obj_t* cancelBtn = lv_btn_create(_channelDeletePanel);
+    lv_obj_set_size(cancelBtn, 96, 34);
+    lv_obj_align(cancelBtn, LV_ALIGN_BOTTOM_RIGHT, -12, -10);
+    lv_obj_add_event_cb(cancelBtn, onDeleteChannelCancel, LV_EVENT_CLICKED, this);
+    lv_obj_t* cancelLbl = lv_label_create(cancelBtn);
+    lv_label_set_text(cancelLbl, "Cancel");
+    lv_obj_center(cancelLbl);
+  }
+
+  void closeDeleteChannelPrompt() {
+    if (_channelDeletePanel != nullptr) {
+      lv_obj_del(_channelDeletePanel);
+      _channelDeletePanel = nullptr;
+    }
+    _pendingDeleteChannelIdx = 0xFF;
   }
 
   void refreshContactList() {
@@ -1154,15 +1369,20 @@ private:
 
   lv_obj_t* _tabview;
   lv_obj_t* _channelsList;
+  lv_obj_t* _addChannelBtn;
   lv_obj_t* _contactsList;
   lv_obj_t* _threadList;
   lv_obj_t* _composer;
   lv_obj_t* _input;
   lv_obj_t* _sendBtn;
+  lv_obj_t* _channelEditorPanel;
+  lv_obj_t* _channelEditorInput;
+  lv_obj_t* _channelDeletePanel;
 
   bool _inThread;
   uint32_t _threadId;
   bool _threadPrivate;
+  uint8_t _pendingDeleteChannelIdx = 0xFF;
   bool _contactsLoaded;
   uint32_t _lastRefresh;
   uint32_t _lastContactLongPressMs;
