@@ -7,7 +7,6 @@
 #include "WindowManager.h"
 #include "target.h"
 
-#include <time.h>
 #include <string>
 #include <vector>
 
@@ -425,8 +424,6 @@ public:
     FIELD_CR,
     FIELD_TX,
     FIELD_BLE_PIN,
-    FIELD_CLOCK_HHMM,
-    FIELD_TIMEZONE_UTC,
     FIELD_SCREEN_TIMEOUT,
   };
 
@@ -456,15 +453,6 @@ public:
     lv_obj_set_style_border_width(_list, 0, 0);
     lv_obj_set_style_bg_color(_list, lv_color_hex(0x101820), 0);
 
-    _syncClockBtn = lv_btn_create(layout);
-    lv_obj_set_size(_syncClockBtn, 118, 30);
-    lv_obj_align(_syncClockBtn, LV_ALIGN_TOP_RIGHT, -14, 10);
-    lv_obj_set_style_bg_color(_syncClockBtn, lv_color_hex(0x2F6DF6), 0);
-    lv_obj_add_event_cb(_syncClockBtn, onSyncClockClicked, LV_EVENT_CLICKED, this);
-    lv_obj_t* syncLbl = lv_label_create(_syncClockBtn);
-    lv_label_set_text(syncLbl, "Sync Clock");
-    lv_obj_center(syncLbl);
-
     refreshRows();
   }
 
@@ -476,7 +464,6 @@ public:
     _layout = nullptr;
     _list = nullptr;
     _hint = nullptr;
-    _syncClockBtn = nullptr;
   }
 
   void onMessageReceived(MeshMessage) override {}
@@ -521,27 +508,6 @@ private:
     lv_label_set_text(self->_hint, "Tap a setting to edit with keyboard");
   }
 
-  static void onSyncClockClicked(lv_event_t* e) {
-    auto* self = static_cast<SettingsApp*>(lv_event_get_user_data(e));
-    if (!self || self->_hint == nullptr) {
-      return;
-    }
-
-    uint32_t estimated = 0;
-    uint8_t samples = 0;
-    const bool applied = the_mesh.syncRtcFromHeardAdverts(estimated, samples);
-
-    char msg[96];
-    if (samples == 0) {
-      snprintf(msg, sizeof(msg), "No usable advert timestamps yet");
-    } else if (applied) {
-      snprintf(msg, sizeof(msg), "Clock synced from %u adverts", static_cast<unsigned>(samples));
-    } else {
-      snprintf(msg, sizeof(msg), "Estimate ready (%u refs), clock not moved", static_cast<unsigned>(samples));
-    }
-    lv_label_set_text(self->_hint, msg);
-  }
-
   static void onKeyboardCancel(lv_event_t* e) {
     if (lv_event_get_code(e) != LV_EVENT_CANCEL) {
       return;
@@ -568,8 +534,6 @@ private:
     addRow("Coding Rate", FIELD_CR);
     addRow("TX Power (dBm)", FIELD_TX);
     addRow("BLE Pin", FIELD_BLE_PIN);
-    addRow("Clock (HH:MM)", FIELD_CLOCK_HHMM);
-    addRow("Timezone (UTC offset)", FIELD_TIMEZONE_UTC);
     addRow("Screen Timeout (sec, 0=manual)", FIELD_SCREEN_TIMEOUT);
   }
 
@@ -616,38 +580,6 @@ private:
         break;
       case FIELD_BLE_PIN:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(prefs->ble_pin));
-        break;
-      case FIELD_CLOCK_HHMM: {
-        auto* rtc = the_mesh.getRTCClock();
-        constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
-        uint32_t now = 0;
-        if (rtc != nullptr) {
-          now = rtc->getCurrentTime();
-        }
-        if (now < kMinReasonableEpoch) {
-          time_t sysNow;
-          time(&sysNow);
-          if (sysNow > 0) {
-            now = static_cast<uint32_t>(sysNow);
-          }
-        }
-        if (now < kMinReasonableEpoch) {
-          snprintf(out, outLen, "--:--");
-          break;
-        }
-        const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
-        int64_t localNow = static_cast<int64_t>(now) + static_cast<int64_t>(offsetSec);
-        if (localNow < 0) {
-          localNow = 0;
-        }
-        const uint32_t secDay = static_cast<uint32_t>(localNow % (24LL * 3600LL));
-        const uint32_t hh = secDay / 3600UL;
-        const uint32_t mm = (secDay % 3600UL) / 60UL;
-        snprintf(out, outLen, "%02lu:%02lu", static_cast<unsigned long>(hh), static_cast<unsigned long>(mm));
-        break;
-      }
-      case FIELD_TIMEZONE_UTC:
-        snprintf(out, outLen, "%+d", static_cast<int>(prefs->utc_offset_hours));
         break;
       case FIELD_SCREEN_TIMEOUT:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(grid::runtime::getScreenTimeoutSec()));
@@ -777,74 +709,6 @@ private:
         prefs->ble_pin = static_cast<uint32_t>(v);
         break;
       }
-      case FIELD_CLOCK_HHMM: {
-        int hh = -1;
-        int mm = -1;
-        if (sscanf(txt, "%d:%d", &hh, &mm) != 2) {
-          return false;
-        }
-        if (hh < 0 || hh > 23 || mm < 0 || mm > 59) {
-          return false;
-        }
-
-        auto* rtc = the_mesh.getRTCClock();
-        if (rtc == nullptr) {
-          return false;
-        }
-
-        constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
-        uint32_t now = rtc->getCurrentTime();
-        if (now < kMinReasonableEpoch) {
-          time_t sysNow;
-          time(&sysNow);
-          if (sysNow > 0) {
-            now = static_cast<uint32_t>(sysNow);
-          }
-        }
-
-        const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
-        int64_t localNow = static_cast<int64_t>(now) + static_cast<int64_t>(offsetSec);
-        if (localNow < 0) {
-          localNow = 0;
-        }
-
-        const int64_t localDayStart = localNow - (localNow % (24LL * 3600LL));
-        const int64_t targetLocal = localDayStart + static_cast<int64_t>(hh) * 3600LL + static_cast<int64_t>(mm) * 60LL;
-        int64_t targetUtc = targetLocal - static_cast<int64_t>(offsetSec);
-        if (targetUtc < 0) {
-          targetUtc = 0;
-        }
-        rtc->setCurrentTime(static_cast<uint32_t>(targetUtc));
-        break;
-      }
-      case FIELD_TIMEZONE_UTC: {
-        const char* p = txt;
-        while (*p == ' ' || *p == '\t') {
-          ++p;
-        }
-        if ((p[0] == 'U' || p[0] == 'u') &&
-            (p[1] == 'T' || p[1] == 't') &&
-            (p[2] == 'C' || p[2] == 'c')) {
-          p += 3;
-        }
-
-        char* end = nullptr;
-        long v = strtol(p, &end, 10);
-        if (end == p) {
-          return false;
-        }
-        while (*end == ' ' || *end == '\t') {
-          ++end;
-        }
-        if (*end != '\0') {
-          return false;
-        }
-        if (v < -12 || v > 14) {
-          return false;
-        }
-        prefs->utc_offset_hours = static_cast<int8_t>(v);
-        break;
-      }
       case FIELD_SCREEN_TIMEOUT: {
         unsigned long v = strtoul(txt, nullptr, 10);
         if (v > 24UL * 60UL * 60UL) return false;
@@ -868,7 +732,6 @@ private:
   lv_obj_t* _layout = nullptr;
   lv_obj_t* _list = nullptr;
   lv_obj_t* _hint = nullptr;
-  lv_obj_t* _syncClockBtn = nullptr;
 
   lv_obj_t* _editorPanel = nullptr;
   lv_obj_t* _editorTitle = nullptr;

@@ -1,9 +1,7 @@
 #include "WindowManager.h"
 
 #include <algorithm>
-#include <time.h>
 
-#include "MyMesh.h"
 #include "target.h"
 
 namespace {
@@ -52,7 +50,6 @@ WindowManager::WindowManager()
       _activeApp(nullptr),
       _root(nullptr),
       _statusBar(nullptr),
-  _statusClockLabel(nullptr),
   _statusSignalLabel(nullptr),
   _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
   _statusBleLabel(nullptr),
@@ -63,7 +60,6 @@ WindowManager::WindowManager()
       _contentRoot(nullptr),
     _activeScreen(nullptr),
     _rightNavHandler(nullptr),
-    _lastClockUpdateMs(0),
     _lastBatteryUpdateMs(0) {}
 
 bool WindowManager::begin(MeshBridge& bridge, lv_obj_t* root) {
@@ -87,47 +83,6 @@ void WindowManager::tick() {
   if (_root != nullptr && (now - sLastButtonStylePassMs) >= 250) {
     sLastButtonStylePassMs = now;
     applyAmberButtonOutlineRecursive(_root);
-  }
-
-  if (_statusClockLabel != nullptr && (now - _lastClockUpdateMs) >= 1000) {
-    _lastClockUpdateMs = now;
-
-    constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
-    uint32_t epochNow = 0;
-    auto* rtc = the_mesh.getRTCClock();
-    if (rtc != nullptr) {
-      epochNow = rtc->getCurrentTime();
-    }
-    if (epochNow < kMinReasonableEpoch) {
-      time_t sysNow;
-      time(&sysNow);
-      if (sysNow > 0) {
-        epochNow = static_cast<uint32_t>(sysNow);
-      }
-    }
-
-    if (epochNow < kMinReasonableEpoch) {
-      lv_label_set_text(_statusClockLabel, "--:--");
-      return;
-    }
-
-    int32_t offsetSec = 0;
-    NodePrefs* prefs = the_mesh.getNodePrefs();
-    if (prefs != nullptr) {
-      offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
-    }
-
-    int64_t localNow = static_cast<int64_t>(epochNow) + static_cast<int64_t>(offsetSec);
-    if (localNow < 0) {
-      localNow = 0;
-    }
-
-    const uint32_t secDay = static_cast<uint32_t>(localNow % (24LL * 3600LL));
-    const uint32_t hh = secDay / 3600;
-    const uint32_t mm = (secDay % 3600) / 60;
-    char clockText[8];
-    snprintf(clockText, sizeof(clockText), "%02lu:%02lu", static_cast<unsigned long>(hh), static_cast<unsigned long>(mm));
-    lv_label_set_text(_statusClockLabel, clockText);
   }
 
   if (_statusBatteryLabel != nullptr && (now - _lastBatteryUpdateMs) >= 5000) {
@@ -265,15 +220,10 @@ void WindowManager::buildShell(lv_obj_t* root) {
 }
 
 void WindowManager::buildStatusBar() {
-  _statusClockLabel = lv_label_create(_statusBar);
-  lv_label_set_text(_statusClockLabel, "--:--");
-  lv_obj_align(_statusClockLabel, LV_ALIGN_LEFT_MID, 10, 0);
-  lv_obj_set_style_text_color(_statusClockLabel, lv_color_hex(COLOR_TEXT), 0);
-
   lv_obj_t* meter = lv_obj_create(_statusBar);
   lv_obj_remove_style_all(meter);
   lv_obj_set_size(meter, 122, 24);
-  lv_obj_align(meter, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(meter, LV_ALIGN_LEFT_MID, 10, 0);
 
   for (int i = 0; i < 4; ++i) {
     _statusSignalBars[i] = lv_obj_create(meter);
