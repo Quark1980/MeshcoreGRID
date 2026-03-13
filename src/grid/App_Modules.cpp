@@ -453,6 +453,15 @@ public:
     lv_obj_set_style_border_width(_list, 0, 0);
     lv_obj_set_style_bg_color(_list, lv_color_hex(0x101820), 0);
 
+    _syncClockBtn = lv_btn_create(layout);
+    lv_obj_set_size(_syncClockBtn, 118, 30);
+    lv_obj_align(_syncClockBtn, LV_ALIGN_TOP_RIGHT, -14, 38);
+    lv_obj_set_style_bg_color(_syncClockBtn, lv_color_hex(0x2F6DF6), 0);
+    lv_obj_add_event_cb(_syncClockBtn, onSyncClockClicked, LV_EVENT_CLICKED, this);
+    lv_obj_t* syncLbl = lv_label_create(_syncClockBtn);
+    lv_label_set_text(syncLbl, "Sync Clock");
+    lv_obj_center(syncLbl);
+
     refreshRows();
   }
 
@@ -464,6 +473,7 @@ public:
     _layout = nullptr;
     _list = nullptr;
     _hint = nullptr;
+    _syncClockBtn = nullptr;
   }
 
   void onMessageReceived(MeshMessage) override {}
@@ -506,6 +516,27 @@ private:
     }
     self->closeEditor();
     lv_label_set_text(self->_hint, "Tap a setting to edit with keyboard");
+  }
+
+  static void onSyncClockClicked(lv_event_t* e) {
+    auto* self = static_cast<SettingsApp*>(lv_event_get_user_data(e));
+    if (!self || self->_hint == nullptr) {
+      return;
+    }
+
+    uint32_t estimated = 0;
+    uint8_t samples = 0;
+    const bool applied = the_mesh.syncRtcFromHeardAdverts(estimated, samples);
+
+    char msg[96];
+    if (samples == 0) {
+      snprintf(msg, sizeof(msg), "No usable advert timestamps yet");
+    } else if (applied) {
+      snprintf(msg, sizeof(msg), "Clock synced from %u adverts", static_cast<unsigned>(samples));
+    } else {
+      snprintf(msg, sizeof(msg), "Estimate ready (%u refs), clock not moved", static_cast<unsigned>(samples));
+    }
+    lv_label_set_text(self->_hint, msg);
   }
 
   static void onKeyboardCancel(lv_event_t* e) {
@@ -732,6 +763,7 @@ private:
   lv_obj_t* _layout = nullptr;
   lv_obj_t* _list = nullptr;
   lv_obj_t* _hint = nullptr;
+  lv_obj_t* _syncClockBtn = nullptr;
 
   lv_obj_t* _editorPanel = nullptr;
   lv_obj_t* _editorTitle = nullptr;

@@ -104,6 +104,7 @@ public:
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
+  bool syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSamples);
 
 #if GRID_OS_BOOT
   // Set the group-send context (threadId + timestamp) before calling sendGroupMessage()
