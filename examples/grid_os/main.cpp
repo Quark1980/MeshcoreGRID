@@ -247,6 +247,11 @@ bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
     return false;
   }
 
+#if GRID_OS_BOOT
+  // Prime the pending-send context so that sendFloodScoped(channel, pkt) can
+  // capture the outgoing packet hash for group-repeat detection in logRxRaw.
+  the_mesh.beginGroupSend(static_cast<uint32_t>(item.threadId & 0xFFu), item.timestamp);
+#endif
   return the_mesh.sendGroupMessage(item.timestamp,
                                    channel.channel,
                                    the_mesh.getNodePrefs()->node_name,

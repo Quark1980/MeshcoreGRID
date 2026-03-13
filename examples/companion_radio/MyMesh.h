@@ -105,6 +105,15 @@ public:
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
 
+#if GRID_OS_BOOT
+  // Set the group-send context (threadId + timestamp) before calling sendGroupMessage()
+  // so that sendFloodScoped(channel, pkt) can record the packet hash for repeat detection.
+  void beginGroupSend(uint32_t gridThreadId, uint32_t timestamp) {
+    _pendingGroupThreadId = gridThreadId;
+    _pendingGroupTimestamp = timestamp;
+  }
+#endif
+
 protected:
   float getAirtimeBudgetFactor() const override;
   int getInterferenceThreshold() const override;
@@ -236,6 +245,12 @@ private:
 
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+
+#if GRID_OS_BOOT
+  // Pending group-send context, set via beginGroupSend() before sendGroupMessage().
+  uint32_t _pendingGroupThreadId = 0;
+  uint32_t _pendingGroupTimestamp = 0;
+#endif
 };
 
 extern MyMesh the_mesh;

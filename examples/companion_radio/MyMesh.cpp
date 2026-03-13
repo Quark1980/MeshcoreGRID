@@ -306,6 +306,10 @@ void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
                                          static_cast<int8_t>(snr),
                                          raw,
                                          len);
+  // Check whether this raw packet is a rebroadcast of one of our own group messages.
+  MeshBridge::instance().checkRawPacketRepeat(raw, len,
+                                              static_cast<int16_t>(rssi),
+                                              static_cast<int8_t>(snr));
   MeshBridge::instance().publishEvent(GRID_EVT_RADIO_STATS,
                                       nullptr,
                                       "radio",
@@ -520,6 +524,16 @@ void MyMesh::sendFloodScoped(const ContactInfo& recipient, mesh::Packet* pkt, ui
   }
 }
 void MyMesh::sendFloodScoped(const mesh::GroupChannel& channel, mesh::Packet* pkt, uint32_t delay_millis) {
+#if GRID_OS_BOOT
+  // Record the packet hash of every outgoing group message so that re-heard
+  // rebroadcasts can be attributed back to the original local bubble.
+  if (pkt && _pendingGroupTimestamp != 0) {
+    uint8_t hash[8]; // MAX_HASH_SIZE
+    pkt->calculatePacketHash(hash);
+    MeshBridge::instance().noteSentGroupHash(_pendingGroupThreadId, _pendingGroupTimestamp, hash);
+    _pendingGroupTimestamp = 0; // consume the context
+  }
+#endif
   // TODO: have per-channel send_scope
   if (send_scope.isNull()) {
     sendFlood(pkt, delay_millis, _prefs.path_hash_mode + 1);

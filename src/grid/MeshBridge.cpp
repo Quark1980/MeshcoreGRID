@@ -33,7 +33,10 @@ MeshBridge::MeshBridge()
       _hasRadioMetrics(false),
       _lastRssi(-127),
       _lastSnr(0),
-      _activeApp(nullptr) {}
+      _activeApp(nullptr),
+      _sentGroupHashHead(0) {
+  memset(_sentGroupHashes, 0, sizeof(_sentGroupHashes));
+}
 
 bool MeshBridge::begin(mesh::Mesh* meshInstance,
                        TaskFunction_t meshTaskFn,
@@ -411,6 +414,32 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
     _lastSnr = msg.snr;
     _hasRadioMetrics = true;
 
+    // Handle group-repeat events: find the matching local history entry, increment
+    // timesHeard, then forward to the active app so it can update the bubble label.
+    if (msg.packetType == GRID_EVT_GROUP_REPEAT) {
+      const uint32_t key = makeThreadKey(msg.threadId, false);
+      auto hit = _threadHistory.find(key);
+      if (hit != _threadHistory.end()) {
+        for (auto& entry : hit->second) {
+          if (!entry.isLocal) continue;
+          const uint32_t tsA = entry.timestamp;
+          const uint32_t tsB = msg.timestamp;
+          const uint32_t diff = (tsA > tsB) ? (tsA - tsB) : (tsB - tsA);
+          if (diff > 10000) continue; // 10-second tolerance
+          entry.timesHeard = static_cast<uint8_t>(entry.timesHeard + 1);
+          msg = entry;
+          msg.packetType = GRID_EVT_GROUP_REPEAT; // keep type for App_Messenger_Stub
+          break;
+        }
+      }
+      if (_activeApp != nullptr && _threadFilterEnabled &&
+          msg.threadId == _threadFilterId && !_threadFilterPrivate) {
+        _activeApp->onMessageReceived(msg);
+      }
+      ++count;
+      continue;
+    }
+
     if (isTextPacketType(msg.packetType)) {
       mergedIntoLocal = appendThreadHistory(msg, &msg);
       // Mark echo as local so UI knows to merge with original sent message
@@ -539,6 +568,46 @@ bool MeshBridge::appendThreadHistory(const MeshMessage& msg, MeshMessage* resolv
 
   if (resolvedMsg != nullptr) {
     *resolvedMsg = history.back();
+  }
+  return false;
+}
+
+void MeshBridge::noteSentGroupHash(uint32_t threadId, uint32_t timestamp, const uint8_t hash[]) {
+  const int idx = _sentGroupHashHead % kMaxSentHashes;
+  auto& e = _sentGroupHashes[idx];
+  e.valid = true;
+  e.threadId = threadId;
+  e.timestamp = timestamp;
+  memcpy(e.hash, hash, 8 /* MAX_HASH_SIZE */);
+  _sentGroupHashHead++;
+}
+
+bool MeshBridge::checkRawPacketRepeat(const uint8_t raw[], int len, int16_t rssi, int8_t snr) {
+  if (len <= 0 || len > 255) return false;
+
+  mesh::Packet pkt;
+  if (!pkt.readFrom(raw, static_cast<uint8_t>(len))) return false;
+  if (pkt.getPayloadType() != PAYLOAD_TYPE_GRP_TXT) return false;
+
+  uint8_t hash[8]; // MAX_HASH_SIZE
+  pkt.calculatePacketHash(hash);
+
+  for (int i = 0; i < kMaxSentHashes; i++) {
+    const auto& e = _sentGroupHashes[i];
+    if (!e.valid) continue;
+    if (memcmp(e.hash, hash, 8) != 0) continue;
+
+    // Match: one of our sent group packets was re-heard (rebroadcast by a repeater).
+    publishEvent(GRID_EVT_GROUP_REPEAT,
+                 "",          // text unused for repeat events — matched by timestamp
+                 "You",
+                 rssi,
+                 snr,
+                 e.timestamp, // original send timestamp — used to find the pending echo
+                 e.threadId,
+                 false,
+                 0);
+    return true;
   }
   return false;
 }

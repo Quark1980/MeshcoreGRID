@@ -135,6 +135,16 @@ public:
     if (_threadList == nullptr || !_inThread) {
       return;
     }
+
+    // Group-repeat event: a rebroadcast of our own group message was heard.
+    // Find the matching pending echo by threadId + timestamp and update the label.
+    if (msg.packetType == GRID_EVT_GROUP_REPEAT) {
+      if (msg.threadId == _threadId && !msg.isPrivate) {
+        tryResolveRepeat(msg);
+      }
+      return;
+    }
+
     if (msg.packetType != PAYLOAD_TYPE_TXT_MSG && msg.packetType != PAYLOAD_TYPE_GRP_TXT) {
       return;
     }
@@ -272,6 +282,13 @@ private:
     }
   }
 
+  static void onBackgroundTapped(lv_event_t* e) {
+    auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+      self->dismissKeyboardFromOutsideTap();
+    }
+  }
+
   static void onTabChanged(lv_event_t* e) {
     auto* self = static_cast<MessengerManagerApp*>(lv_event_get_user_data(e));
     if (self == nullptr || self->_tabview == nullptr) {
@@ -380,6 +397,7 @@ private:
     _header = lv_obj_create(_layout);
     lv_obj_set_size(_header, LV_PCT(100), 46);
     lv_obj_align(_header, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_add_flag(_header, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_radius(_header, 0, 0);
     lv_obj_set_style_bg_color(_header, lv_color_hex(0x0F141B), 0);
     lv_obj_set_style_border_width(_header, 0, 0);
@@ -416,6 +434,7 @@ private:
 
     // Keep header controls touchable above tab/content layers.
     lv_obj_move_foreground(_header);
+    lv_obj_add_event_cb(_header, onBackgroundTapped, LV_EVENT_CLICKED, this);
   }
 
   void clearContent() {
@@ -558,6 +577,18 @@ private:
       target -= lv_obj_get_height(_composer);
     }
     animateThreadListHeight(target);
+  }
+
+  void dismissKeyboardFromOutsideTap() {
+    if (_input == nullptr || gKeyboard == nullptr) {
+      return;
+    }
+    if (lv_obj_has_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN)) {
+      return;
+    }
+
+    lv_obj_clear_state(_input, LV_STATE_FOCUSED);
+    hideKeyboard();
   }
 
   void showComposer() {
@@ -915,6 +946,33 @@ private:
     return meta;
   }
 
+  bool tryResolveRepeat(const MeshMessage& msg) {
+    // Match the most recent pending echo for this thread by timestamp (10-second tolerance).
+    // Used for GRID_EVT_GROUP_REPEAT events where we know hash already matched.
+    constexpr uint32_t kRepeatTimestampToleranceMs = 10000;
+    for (auto it = _pendingEchoes.rbegin(); it != _pendingEchoes.rend(); ++it) {
+      auto& pending = *it;
+      if (pending.threadId != msg.threadId || pending.isPrivate != msg.isPrivate) {
+        continue;
+      }
+      const uint32_t tsA = pending.timestamp;
+      const uint32_t tsB = msg.timestamp;
+      const uint32_t diff = (tsA > tsB) ? (tsA - tsB) : (tsB - tsA);
+      if (diff > kRepeatTimestampToleranceMs) {
+        continue;
+      }
+      pending.timesHeard = msg.timesHeard;
+      if (pending.metaLabel != nullptr) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "* Heard: %u", static_cast<unsigned>(pending.timesHeard));
+        lv_label_set_text(pending.metaLabel, buf);
+        lv_obj_set_style_text_color(pending.metaLabel, lv_color_hex(0x00D084), 0); // green = confirmed
+      }
+      return true;
+    }
+    return false;
+  }
+
   bool tryResolveEcho(const MeshMessage& msg) {
     constexpr uint32_t kEchoTimestampToleranceMs = 5000;
 
@@ -1006,6 +1064,7 @@ private:
 
     _threadList = lv_obj_create(_content);
     lv_obj_remove_style_all(_threadList);
+    lv_obj_add_flag(_threadList, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_threadList, LV_PCT(100), LV_PCT(100));
     lv_obj_set_height(_threadList, lv_obj_get_height(_content) - navOverlapInContent());
     lv_obj_align(_threadList, LV_ALIGN_TOP_MID, 0, 0);
@@ -1021,6 +1080,7 @@ private:
     lv_obj_set_scroll_dir(_threadList, LV_DIR_VER);
     lv_obj_set_flex_flow(_threadList, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(_threadList, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_add_event_cb(_threadList, onBackgroundTapped, LV_EVENT_CLICKED, this);
 
     lv_obj_move_foreground(_composer);
 

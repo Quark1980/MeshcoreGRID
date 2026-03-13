@@ -126,6 +126,14 @@ public:
   QueueHandle_t rxQueue() const { return _rxQueue; }
   QueueHandle_t txQueue() const { return _txQueue; }
 
+  // Called from the mesh task only (thread-safe by design).
+  // Records the hash of a group packet just before it is flooded so that
+  // re-heard rebroadcasts can be matched later in logRxRaw.
+  void noteSentGroupHash(uint32_t threadId, uint32_t timestamp, const uint8_t hash[]);
+  // Parses a raw received radio frame, checks whether it matches a previously
+  // sent group packet hash, and queues a GRID_EVT_GROUP_REPEAT event if so.
+  bool checkRawPacketRepeat(const uint8_t raw[], int len, int16_t rssi, int8_t snr);
+
 private:
   struct BridgeEvent {
     uint8_t packetType;
@@ -182,4 +190,16 @@ private:
   std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
   std::vector<NodeAdvertSummary> _bootNodeAdverts;
   MeshApp* _activeApp;
+
+  // Circular buffer of recently-sent group packet hashes.
+  // Accessed only from the mesh task — no locking required.
+  static constexpr int kMaxSentHashes = 8;
+  struct SentGroupHash {
+    bool valid;
+    uint32_t threadId;
+    uint32_t timestamp;
+    uint8_t hash[8]; // MAX_HASH_SIZE = 8
+  };
+  SentGroupHash _sentGroupHashes[kMaxSentHashes];
+  int _sentGroupHashHead;
 };

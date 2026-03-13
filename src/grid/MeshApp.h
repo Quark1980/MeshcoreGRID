@@ -21,6 +21,7 @@ struct MeshMessage {
 
 constexpr uint8_t GRID_EVT_NODE_ADVERT = 0xA1;
 constexpr uint8_t GRID_EVT_RADIO_STATS = 0xA2;
+constexpr uint8_t GRID_EVT_GROUP_REPEAT = 0xA3;  // fired when a sent group packet is re-heard via mesh
 
 class MeshApp {
 public:
