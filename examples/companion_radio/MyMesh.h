@@ -69,6 +69,7 @@
 
 #include <helpers/BaseChatMesh.h>
 #include <helpers/TransportKeyStore.h>
+#include <vector>
 
 /* -------------------------------------------------------------------------------------- */
 
@@ -107,6 +108,7 @@ public:
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
   bool syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSamples);
+  bool addDiscoveredContactById(uint32_t contactId);
 
 #if GRID_OS_BOOT
   // Set the group-send context (threadId + timestamp) before calling sendGroupMessage()
@@ -248,6 +250,13 @@ private:
 
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+
+  struct PendingDiscoveredContact {
+    uint32_t contactId;
+    ContactInfo contact;
+    uint32_t seenAt;
+  };
+  std::vector<PendingDiscoveredContact> _pendingDiscoveredContacts;
 
 #if GRID_OS_BOOT
   // Pending group-send context, set via beginGroupSend() before sendGroupMessage().

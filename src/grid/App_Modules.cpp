@@ -68,6 +68,11 @@ void applyGridKeyboardLayout(lv_obj_t* keyboard) {
 
 class NodesApp : public MeshApp {
 public:
+  struct AddBinding {
+    lv_obj_t* button;
+    uint32_t contactId;
+  };
+
   explicit NodesApp(MeshBridge* bridge)
       : _bridge(bridge), _list(nullptr), _countLabel(nullptr), _showingEmptyState(false) {}
   void release() override { this->~NodesApp(); heap_caps_free(this); }
@@ -94,6 +99,7 @@ public:
   void onLoop() override {}
   void onClose() override {
     if (_bridge) _bridge->clearSubscribers(GRID_EVT_NODE_ADVERT);
+    _addBindings.clear();
     _list = nullptr;
     _countLabel = nullptr;
     _showingEmptyState = false;
@@ -103,14 +109,102 @@ public:
     renderAdvertsNewestFirst();
   }
 private:
-  void addNodeListText(const char* text) {
-    if (_list == nullptr || text == nullptr) {
+  static void onAddNodeClicked(lv_event_t* e) {
+    auto* self = static_cast<NodesApp*>(lv_event_get_user_data(e));
+    if (self == nullptr || self->_bridge == nullptr) {
       return;
     }
 
-    lv_obj_t* item = lv_list_add_text(_list, text);
-    lv_obj_set_style_text_color(item, lv_color_hex(0xEDF4FF), 0);
-    lv_obj_set_style_text_font(item, &lv_font_montserrat_14, 0);
+    lv_obj_t* btn = lv_event_get_target(e);
+    for (const auto& binding : self->_addBindings) {
+      if (binding.button != btn) {
+        continue;
+      }
+      self->_bridge->addDiscoveredContactById(binding.contactId);
+      self->renderAdvertsNewestFirst();
+      return;
+    }
+  }
+
+  const char* relativeAdvertAge(uint32_t ts) const {
+    static char buf[24];
+    if (ts == 0) {
+      snprintf(buf, sizeof(buf), "unknown");
+      return buf;
+    }
+
+    const uint32_t now = the_mesh.getRTCClock()->getCurrentTime();
+    if (now == 0 || now < ts) {
+      snprintf(buf, sizeof(buf), "unknown");
+      return buf;
+    }
+
+    const uint32_t age = now - ts;
+    if (age < 60) {
+      snprintf(buf, sizeof(buf), "%lus", static_cast<unsigned long>(age));
+    } else if (age < 3600) {
+      snprintf(buf, sizeof(buf), "%lum", static_cast<unsigned long>(age / 60));
+    } else if (age < 86400) {
+      snprintf(buf, sizeof(buf), "%luh", static_cast<unsigned long>(age / 3600));
+    } else {
+      snprintf(buf, sizeof(buf), "%lud", static_cast<unsigned long>(age / 86400));
+    }
+    return buf;
+  }
+
+  void addNodeCard(const MeshBridge::NodeAdvertSummary& advert) {
+    if (_list == nullptr) {
+      return;
+    }
+
+    lv_obj_t* row = lv_obj_create(_list);
+    lv_obj_remove_style_all(row);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
+    lv_obj_set_style_radius(row, 12, 0);
+    lv_obj_set_style_border_width(row, 1, 0);
+    lv_obj_set_style_border_color(row, lv_color_hex(0x263040), 0);
+    lv_obj_set_style_pad_left(row, 12, 0);
+    lv_obj_set_style_pad_right(row, 12, 0);
+    lv_obj_set_style_pad_top(row, 10, 0);
+    lv_obj_set_style_pad_bottom(row, 10, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* left = lv_obj_create(row);
+    lv_obj_remove_style_all(left);
+    lv_obj_set_flex_grow(left, 1);
+    lv_obj_set_height(left, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t* nameLabel = lv_label_create(left);
+    const char* label = advert.text.empty() ? "(unnamed advert)" : advert.text.c_str();
+    lv_label_set_text(nameLabel, label);
+    lv_obj_set_style_text_color(nameLabel, lv_color_hex(0xEDF4FF), 0);
+    lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_14, 0);
+
+    lv_obj_t* ageLabel = lv_label_create(left);
+    char ageText[40];
+    snprintf(ageText, sizeof(ageText), "heard %s ago", relativeAdvertAge(advert.timestamp));
+    lv_label_set_text(ageLabel, ageText);
+    lv_obj_set_style_text_color(ageLabel, lv_color_hex(0xAFC2D8), 0);
+    lv_obj_set_style_text_font(ageLabel, &lv_font_montserrat_12, 0);
+
+    if (_bridge != nullptr && advert.contactId != 0 && !_bridge->hasContact(advert.contactId)) {
+      lv_obj_t* addBtn = lv_btn_create(row);
+      lv_obj_set_size(addBtn, 56, 30);
+      lv_obj_set_style_bg_color(addBtn, lv_color_hex(0x2B7FFF), 0);
+      lv_obj_set_style_bg_color(addBtn, lv_color_hex(0x1F63C6), LV_STATE_PRESSED);
+      lv_obj_set_style_radius(addBtn, 8, 0);
+      lv_obj_add_event_cb(addBtn, onAddNodeClicked, LV_EVENT_CLICKED, this);
+      lv_obj_t* addLbl = lv_label_create(addBtn);
+      lv_label_set_text(addLbl, "Add");
+      lv_obj_center(addLbl);
+      _addBindings.push_back({addBtn, advert.contactId});
+    }
   }
 
   void populateBootAdverts() {
@@ -122,10 +216,13 @@ private:
       return;
     }
 
+    _addBindings.clear();
     lv_obj_clean(_list);
     const auto adverts = _bridge->getBootNodeAdverts();
     if (adverts.empty()) {
-      addNodeListText("No adverts heard this boot");
+      lv_obj_t* item = lv_list_add_text(_list, "No adverts heard this boot");
+      lv_obj_set_style_text_color(item, lv_color_hex(0xEDF4FF), 0);
+      lv_obj_set_style_text_font(item, &lv_font_montserrat_14, 0);
       _showingEmptyState = true;
       updateCountLabel();
       return;
@@ -138,8 +235,7 @@ private:
     });
 
     for (const auto& advert : sorted) {
-      const char* label = advert.text.empty() ? "(unnamed advert)" : advert.text.c_str();
-      addNodeListText(label);
+      addNodeCard(advert);
     }
     _showingEmptyState = false;
     updateCountLabel();
@@ -162,6 +258,7 @@ private:
   lv_obj_t* _list;
   lv_obj_t* _countLabel;
   bool _showingEmptyState;
+  std::vector<AddBinding> _addBindings;
 };
 
 class SimpleCardApp : public MeshApp {

@@ -776,6 +776,9 @@ void setup() {
       }
     }
   });
+  bridge.setAddDiscoveredContactHandler([](uint32_t contactId) {
+    return the_mesh.addDiscoveredContactById(contactId);
+  });
 
   WindowManager& wm = WindowManager::instance();
   wm.begin(bridge);

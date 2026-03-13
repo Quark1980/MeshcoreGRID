@@ -456,6 +456,23 @@ void MyMesh::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path
                                       contactId,
                                       true,
                                       0);
+  if (is_new) {
+    bool updated = false;
+    for (auto& pending : _pendingDiscoveredContacts) {
+      if (pending.contactId == contactId) {
+        pending.contact = contact;
+        pending.seenAt = getRTCClock()->getCurrentTime();
+        updated = true;
+        break;
+      }
+    }
+    if (!updated) {
+      if (_pendingDiscoveredContacts.size() >= 32) {
+        _pendingDiscoveredContacts.erase(_pendingDiscoveredContacts.begin());
+      }
+      _pendingDiscoveredContacts.push_back({contactId, contact, getRTCClock()->getCurrentTime()});
+    }
+  }
 #endif
   if (_serial->isConnected()) {
     if (is_new) {
@@ -507,6 +524,36 @@ int MyMesh::getRecentlyHeard(AdvertPath dest[], int max_num) {
     dest[i] = advert_paths[i];
   }
   return max_num;
+}
+
+bool MyMesh::addDiscoveredContactById(uint32_t contactId) {
+  ContactInfo existing;
+  const int total = getNumContacts();
+  for (int i = 0; i < total; ++i) {
+    if (!getContactByIdx(i, existing)) {
+      continue;
+    }
+    uint32_t existingId = 0;
+    memcpy(&existingId, existing.id.pub_key, sizeof(existingId));
+    if (existingId == contactId) {
+      return true;
+    }
+  }
+
+  for (const auto& pending : _pendingDiscoveredContacts) {
+    if (pending.contactId != contactId) {
+      continue;
+    }
+    ContactInfo toAdd = pending.contact;
+    toAdd.lastmod = getRTCClock()->getCurrentTime();
+    if (addContact(toAdd)) {
+      dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
+      return true;
+    }
+    return false;
+  }
+
+  return false;
 }
 
 void MyMesh::onContactPathUpdated(const ContactInfo &contact) {

@@ -28,6 +28,7 @@ MeshBridge::MeshBridge()
   _bleConnectionGetter(nullptr),
   _bleToggleHandler(nullptr),
   _radioMetricsProvider(nullptr),
+  _addDiscoveredContactHandler(nullptr),
   _threadFilterEnabled(false),
   _threadFilterId(0),
   _threadFilterPrivate(false),
@@ -266,6 +267,10 @@ void MeshBridge::setRadioMetricsProvider(RadioMetricsProvider provider) {
   _radioMetricsProvider = provider;
 }
 
+void MeshBridge::setAddDiscoveredContactHandler(AddDiscoveredContactHandler handler) {
+  _addDiscoveredContactHandler = handler;
+}
+
 bool MeshBridge::refreshRadioMetrics() {
   if (!_radioMetricsProvider) {
     return false;
@@ -342,6 +347,13 @@ bool MeshBridge::hasContact(uint32_t id) const {
     if (contact.id == id) {
       return true;
     }
+  }
+  return false;
+}
+
+bool MeshBridge::addDiscoveredContactById(uint32_t id) {
+  if (_addDiscoveredContactHandler) {
+    return _addDiscoveredContactHandler(id);
   }
   return false;
 }
