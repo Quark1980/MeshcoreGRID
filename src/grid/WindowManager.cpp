@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <time.h>
 
+#include "MyMesh.h"
 #include "target.h"
 
 namespace {
@@ -93,7 +94,18 @@ void WindowManager::tick() {
 
     time_t epochNow;
     time(&epochNow);
-    const uint32_t secDay = static_cast<uint32_t>(epochNow % (24 * 3600));
+    int32_t offsetSec = 0;
+    NodePrefs* prefs = the_mesh.getNodePrefs();
+    if (prefs != nullptr) {
+      offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
+    }
+
+    int64_t localNow = static_cast<int64_t>(epochNow) + static_cast<int64_t>(offsetSec);
+    if (localNow < 0) {
+      localNow = 0;
+    }
+
+    const uint32_t secDay = static_cast<uint32_t>(localNow % (24LL * 3600LL));
     const uint32_t hh = secDay / 3600;
     const uint32_t mm = (secDay % 3600) / 60;
     char clockText[8];

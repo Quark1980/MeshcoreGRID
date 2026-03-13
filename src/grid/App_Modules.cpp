@@ -425,6 +425,7 @@ public:
     FIELD_TX,
     FIELD_BLE_PIN,
     FIELD_CLOCK_HHMM,
+    FIELD_TIMEZONE_UTC,
     FIELD_SCREEN_TIMEOUT,
   };
 
@@ -567,6 +568,7 @@ private:
     addRow("TX Power (dBm)", FIELD_TX);
     addRow("BLE Pin", FIELD_BLE_PIN);
     addRow("Clock (HH:MM)", FIELD_CLOCK_HHMM);
+    addRow("Timezone (UTC offset)", FIELD_TIMEZONE_UTC);
     addRow("Screen Timeout (sec, 0=manual)", FIELD_SCREEN_TIMEOUT);
   }
 
@@ -620,13 +622,23 @@ private:
           snprintf(out, outLen, "n/a");
           break;
         }
-        const uint32_t now = rtc->getCurrentTime();
-        const uint32_t secDay = now % (24UL * 3600UL);
+        const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
+        int64_t localNow = static_cast<int64_t>(rtc->getCurrentTime()) + static_cast<int64_t>(offsetSec);
+        if (localNow < 0) {
+          localNow = 0;
+        }
+        const uint32_t secDay = static_cast<uint32_t>(localNow % (24LL * 3600LL));
         const uint32_t hh = secDay / 3600UL;
         const uint32_t mm = (secDay % 3600UL) / 60UL;
         snprintf(out, outLen, "%02lu:%02lu", static_cast<unsigned long>(hh), static_cast<unsigned long>(mm));
         break;
       }
+      case FIELD_TIMEZONE_UTC:
+        snprintf(out,
+                 outLen,
+                 "UTC%+d",
+                 static_cast<int>(prefs->utc_offset_hours));
+        break;
       case FIELD_SCREEN_TIMEOUT:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(grid::runtime::getScreenTimeoutSec()));
         break;
@@ -770,10 +782,27 @@ private:
           return false;
         }
 
-        const uint32_t now = rtc->getCurrentTime();
-        const uint32_t dayStart = now - (now % (24UL * 3600UL));
-        const uint32_t target = dayStart + static_cast<uint32_t>(hh) * 3600UL + static_cast<uint32_t>(mm) * 60UL;
-        rtc->setCurrentTime(target);
+        const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
+        int64_t localNow = static_cast<int64_t>(rtc->getCurrentTime()) + static_cast<int64_t>(offsetSec);
+        if (localNow < 0) {
+          localNow = 0;
+        }
+
+        const int64_t localDayStart = localNow - (localNow % (24LL * 3600LL));
+        const int64_t targetLocal = localDayStart + static_cast<int64_t>(hh) * 3600LL + static_cast<int64_t>(mm) * 60LL;
+        int64_t targetUtc = targetLocal - static_cast<int64_t>(offsetSec);
+        if (targetUtc < 0) {
+          targetUtc = 0;
+        }
+        rtc->setCurrentTime(static_cast<uint32_t>(targetUtc));
+        break;
+      }
+      case FIELD_TIMEZONE_UTC: {
+        long v = strtol(txt, nullptr, 10);
+        if (v < -12 || v > 14) {
+          return false;
+        }
+        prefs->utc_offset_hours = static_cast<int8_t>(v);
         break;
       }
       case FIELD_SCREEN_TIMEOUT: {
