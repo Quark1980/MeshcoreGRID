@@ -424,6 +424,7 @@ public:
     FIELD_CR,
     FIELD_TX,
     FIELD_BLE_PIN,
+    FIELD_CLOCK_HHMM,
     FIELD_SCREEN_TIMEOUT,
   };
 
@@ -565,6 +566,7 @@ private:
     addRow("Coding Rate", FIELD_CR);
     addRow("TX Power (dBm)", FIELD_TX);
     addRow("BLE Pin", FIELD_BLE_PIN);
+    addRow("Clock (HH:MM)", FIELD_CLOCK_HHMM);
     addRow("Screen Timeout (sec, 0=manual)", FIELD_SCREEN_TIMEOUT);
   }
 
@@ -612,6 +614,19 @@ private:
       case FIELD_BLE_PIN:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(prefs->ble_pin));
         break;
+      case FIELD_CLOCK_HHMM: {
+        auto* rtc = the_mesh.getRTCClock();
+        if (rtc == nullptr) {
+          snprintf(out, outLen, "n/a");
+          break;
+        }
+        const uint32_t now = rtc->getCurrentTime();
+        const uint32_t secDay = now % (24UL * 3600UL);
+        const uint32_t hh = secDay / 3600UL;
+        const uint32_t mm = (secDay % 3600UL) / 60UL;
+        snprintf(out, outLen, "%02lu:%02lu", static_cast<unsigned long>(hh), static_cast<unsigned long>(mm));
+        break;
+      }
       case FIELD_SCREEN_TIMEOUT:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(grid::runtime::getScreenTimeoutSec()));
         break;
@@ -738,6 +753,27 @@ private:
         unsigned long v = strtoul(txt, nullptr, 10);
         if (v > 999999UL) return false;
         prefs->ble_pin = static_cast<uint32_t>(v);
+        break;
+      }
+      case FIELD_CLOCK_HHMM: {
+        int hh = -1;
+        int mm = -1;
+        if (sscanf(txt, "%d:%d", &hh, &mm) != 2) {
+          return false;
+        }
+        if (hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+          return false;
+        }
+
+        auto* rtc = the_mesh.getRTCClock();
+        if (rtc == nullptr) {
+          return false;
+        }
+
+        const uint32_t now = rtc->getCurrentTime();
+        const uint32_t dayStart = now - (now % (24UL * 3600UL));
+        const uint32_t target = dayStart + static_cast<uint32_t>(hh) * 3600UL + static_cast<uint32_t>(mm) * 60UL;
+        rtc->setCurrentTime(target);
         break;
       }
       case FIELD_SCREEN_TIMEOUT: {

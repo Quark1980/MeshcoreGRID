@@ -517,7 +517,7 @@ void showSplash() {
   lv_obj_align(sub, LV_ALIGN_BOTTOM_MID, 0, -10);
 
   uint32_t t0 = millis();
-  while (millis() - t0 < 1200) {
+  while (millis() - t0 < 2500) {
     const uint32_t elapsed = millis() - t0;
 
     for (uint8_t i = 0; i < 7; ++i) {
