@@ -1090,8 +1090,14 @@ private:
       lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_14, 0);
 
       lv_obj_t* timeLabel = lv_label_create(row);
-      lv_label_set_text(timeLabel, formatClockTime(contact.lastSeen));
-      lv_obj_set_width(timeLabel, 72);
+      char timeText[28];
+      if (_contactSortMode == ContactSortMode::LastSeen && contact.lastSeen != 0) {
+        snprintf(timeText, sizeof(timeText), "%s ago", relativeAge(contact.lastSeen));
+      } else {
+        snprintf(timeText, sizeof(timeText), "%s", formatClockTime(contact.lastSeen));
+      }
+      lv_label_set_text(timeLabel, timeText);
+      lv_obj_set_width(timeLabel, 92);
       lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_RIGHT, 0);
       lv_obj_set_style_text_color(timeLabel, lv_color_hex(0xAFC2D8), 0);
       lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_14, 0);

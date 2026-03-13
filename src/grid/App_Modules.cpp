@@ -7,6 +7,7 @@
 #include "WindowManager.h"
 #include "target.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -99,15 +100,7 @@ public:
   }
   void onMessageReceived(MeshMessage msg) override {
     if (_list == nullptr || msg.packetType != GRID_EVT_NODE_ADVERT) return;
-
-    if (_showingEmptyState) {
-      lv_obj_clean(_list);
-      _showingEmptyState = false;
-    }
-
-    const char* label = msg.text.empty() ? "(unnamed advert)" : msg.text.c_str();
-    addNodeListText(label);
-    updateCountLabel();
+    renderAdvertsNewestFirst();
   }
 private:
   void addNodeListText(const char* text) {
@@ -121,10 +114,15 @@ private:
   }
 
   void populateBootAdverts() {
+    renderAdvertsNewestFirst();
+  }
+
+  void renderAdvertsNewestFirst() {
     if (_list == nullptr || _bridge == nullptr) {
       return;
     }
 
+    lv_obj_clean(_list);
     const auto adverts = _bridge->getBootNodeAdverts();
     if (adverts.empty()) {
       addNodeListText("No adverts heard this boot");
@@ -133,7 +131,13 @@ private:
       return;
     }
 
-    for (const auto& advert : adverts) {
+    auto sorted = adverts;
+    std::stable_sort(sorted.begin(), sorted.end(), [](const MeshBridge::NodeAdvertSummary& a,
+                                                      const MeshBridge::NodeAdvertSummary& b) {
+      return a.timestamp > b.timestamp;
+    });
+
+    for (const auto& advert : sorted) {
       const char* label = advert.text.empty() ? "(unnamed advert)" : advert.text.c_str();
       addNodeListText(label);
     }
