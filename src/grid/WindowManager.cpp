@@ -92,8 +92,25 @@ void WindowManager::tick() {
   if (_statusClockLabel != nullptr && (now - _lastClockUpdateMs) >= 1000) {
     _lastClockUpdateMs = now;
 
-    time_t epochNow;
-    time(&epochNow);
+    constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
+    uint32_t epochNow = 0;
+    auto* rtc = the_mesh.getRTCClock();
+    if (rtc != nullptr) {
+      epochNow = rtc->getCurrentTime();
+    }
+    if (epochNow < kMinReasonableEpoch) {
+      time_t sysNow;
+      time(&sysNow);
+      if (sysNow > 0) {
+        epochNow = static_cast<uint32_t>(sysNow);
+      }
+    }
+
+    if (epochNow < kMinReasonableEpoch) {
+      lv_label_set_text(_statusClockLabel, "--:--");
+      return;
+    }
+
     int32_t offsetSec = 0;
     NodePrefs* prefs = the_mesh.getNodePrefs();
     if (prefs != nullptr) {

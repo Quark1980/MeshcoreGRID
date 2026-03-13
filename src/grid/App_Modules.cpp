@@ -7,6 +7,7 @@
 #include "WindowManager.h"
 #include "target.h"
 
+#include <time.h>
 #include <string>
 #include <vector>
 
@@ -618,12 +619,24 @@ private:
         break;
       case FIELD_CLOCK_HHMM: {
         auto* rtc = the_mesh.getRTCClock();
-        if (rtc == nullptr) {
-          snprintf(out, outLen, "n/a");
+        constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
+        uint32_t now = 0;
+        if (rtc != nullptr) {
+          now = rtc->getCurrentTime();
+        }
+        if (now < kMinReasonableEpoch) {
+          time_t sysNow;
+          time(&sysNow);
+          if (sysNow > 0) {
+            now = static_cast<uint32_t>(sysNow);
+          }
+        }
+        if (now < kMinReasonableEpoch) {
+          snprintf(out, outLen, "--:--");
           break;
         }
         const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
-        int64_t localNow = static_cast<int64_t>(rtc->getCurrentTime()) + static_cast<int64_t>(offsetSec);
+        int64_t localNow = static_cast<int64_t>(now) + static_cast<int64_t>(offsetSec);
         if (localNow < 0) {
           localNow = 0;
         }
@@ -634,10 +647,7 @@ private:
         break;
       }
       case FIELD_TIMEZONE_UTC:
-        snprintf(out,
-                 outLen,
-                 "UTC%+d",
-                 static_cast<int>(prefs->utc_offset_hours));
+        snprintf(out, outLen, "%+d", static_cast<int>(prefs->utc_offset_hours));
         break;
       case FIELD_SCREEN_TIMEOUT:
         snprintf(out, outLen, "%lu", static_cast<unsigned long>(grid::runtime::getScreenTimeoutSec()));
@@ -782,8 +792,18 @@ private:
           return false;
         }
 
+        constexpr uint32_t kMinReasonableEpoch = 1700000000UL;
+        uint32_t now = rtc->getCurrentTime();
+        if (now < kMinReasonableEpoch) {
+          time_t sysNow;
+          time(&sysNow);
+          if (sysNow > 0) {
+            now = static_cast<uint32_t>(sysNow);
+          }
+        }
+
         const int32_t offsetSec = static_cast<int32_t>(prefs->utc_offset_hours) * 3600;
-        int64_t localNow = static_cast<int64_t>(rtc->getCurrentTime()) + static_cast<int64_t>(offsetSec);
+        int64_t localNow = static_cast<int64_t>(now) + static_cast<int64_t>(offsetSec);
         if (localNow < 0) {
           localNow = 0;
         }
@@ -798,7 +818,27 @@ private:
         break;
       }
       case FIELD_TIMEZONE_UTC: {
-        long v = strtol(txt, nullptr, 10);
+        const char* p = txt;
+        while (*p == ' ' || *p == '\t') {
+          ++p;
+        }
+        if ((p[0] == 'U' || p[0] == 'u') &&
+            (p[1] == 'T' || p[1] == 't') &&
+            (p[2] == 'C' || p[2] == 'c')) {
+          p += 3;
+        }
+
+        char* end = nullptr;
+        long v = strtol(p, &end, 10);
+        if (end == p) {
+          return false;
+        }
+        while (*end == ' ' || *end == '\t') {
+          ++end;
+        }
+        if (*end != '\0') {
+          return false;
+        }
         if (v < -12 || v > 14) {
           return false;
         }
