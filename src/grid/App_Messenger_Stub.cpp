@@ -1045,6 +1045,11 @@ private:
       std::sort(contacts.begin(), contacts.end(), contactNameLess);
     } else {
       std::sort(contacts.begin(), contacts.end(), [](const MeshBridge::ContactSummary& a, const MeshBridge::ContactSummary& b) {
+        const bool aUnknown = (a.lastSeen == 0);
+        const bool bUnknown = (b.lastSeen == 0);
+        if (aUnknown != bUnknown) {
+          return bUnknown;
+        }
         if (a.lastSeen == b.lastSeen) {
           return contactNameLess(a, b);
         }
