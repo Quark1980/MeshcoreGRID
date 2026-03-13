@@ -847,7 +847,7 @@ void registerChatApp(WindowManager& wm, MeshBridge& bridge) {
 }
 
 void registerNodesApp(WindowManager& wm, MeshBridge& bridge) {
-  wm.registerApp({"nodes", "Nodes", LV_SYMBOL_LIST,
+  wm.registerApp({"nodes", "Discover", LV_SYMBOL_LIST,
                   [&bridge]() -> MeshApp* { return WindowManager::createInPsram<NodesApp>(&bridge); }});
 }
 

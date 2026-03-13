@@ -41,6 +41,7 @@ public:
   };
 
   struct NodeAdvertSummary {
+    uint32_t contactId;
     std::string sender;
     std::string text;
     uint32_t timestamp;
@@ -105,6 +106,10 @@ public:
   std::vector<ChannelSummary> getChannels() const;
   std::vector<ContactSummary> getContacts() const;
   std::vector<NodeAdvertSummary> getBootNodeAdverts() const;
+  bool hasContact(uint32_t id) const;
+  bool isFavoriteContact(uint32_t id) const;
+  bool setFavoriteContact(uint32_t id, bool favorite);
+  bool toggleFavoriteContact(uint32_t id);
 
   void setThreadFilter(uint32_t id, bool isPrivate);
   void clearThreadFilter();
@@ -189,6 +194,7 @@ private:
   std::map<uint32_t, int> _unreadCounts;
   std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
   std::vector<NodeAdvertSummary> _bootNodeAdverts;
+  std::vector<uint32_t> _favoriteContactIds;
   MeshApp* _activeApp;
 
   // Circular buffer of recently-sent group packet hashes.

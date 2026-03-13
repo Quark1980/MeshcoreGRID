@@ -445,7 +445,17 @@ void MyMesh::onContactsFull() {
 
 void MyMesh::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) {
 #if GRID_OS_BOOT
-  MeshBridge::instance().publishEvent(GRID_EVT_NODE_ADVERT, contact.name, contact.name, 0, 0, getRTCClock()->getCurrentTime());
+  uint32_t contactId = 0;
+  memcpy(&contactId, contact.id.pub_key, sizeof(contactId));
+  MeshBridge::instance().publishEvent(GRID_EVT_NODE_ADVERT,
+                                      contact.name,
+                                      contact.name,
+                                      0,
+                                      0,
+                                      getRTCClock()->getCurrentTime(),
+                                      contactId,
+                                      true,
+                                      0);
 #endif
   if (_serial->isConnected()) {
     if (is_new) {
@@ -500,6 +510,21 @@ int MyMesh::getRecentlyHeard(AdvertPath dest[], int max_num) {
 }
 
 void MyMesh::onContactPathUpdated(const ContactInfo &contact) {
+#if GRID_OS_BOOT
+  uint32_t contactId = 0;
+  memcpy(&contactId, contact.id.pub_key, sizeof(contactId));
+  MeshBridge::instance().publishEvent(
+      GRID_EVT_NODE_ADVERT,
+      contact.name,
+      contact.name,
+      static_cast<int16_t>(_radio->getLastRSSI()),
+      static_cast<int8_t>(_radio->getLastSNR()),
+      getRTCClock()->getCurrentTime(),
+      contactId,
+      true,
+      0);
+#endif
+
   out_frame[0] = PUSH_CODE_PATH_UPDATED;
   memcpy(&out_frame[1], contact.id.pub_key, PUB_KEY_SIZE);
   _serial->writeFrame(out_frame, 1 + PUB_KEY_SIZE); // NOTE: app may not be connected

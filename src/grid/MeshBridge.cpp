@@ -1,5 +1,6 @@
 #include "MeshBridge.h"
 
+#include <algorithm>
 #include <string.h>
 
 #include "MeshCore.h"
@@ -226,6 +227,7 @@ void MeshBridge::publishEvent(uint8_t eventType,
 
   if (eventType == GRID_EVT_NODE_ADVERT) {
     NodeAdvertSummary advert;
+    advert.contactId = threadId;
     advert.sender = sender ? sender : "";
     advert.text = text ? text : "";
     advert.timestamp = timestamp;
@@ -332,6 +334,43 @@ std::vector<MeshBridge::ContactSummary> MeshBridge::getContacts() const {
 
 std::vector<MeshBridge::NodeAdvertSummary> MeshBridge::getBootNodeAdverts() const {
   return _bootNodeAdverts;
+}
+
+bool MeshBridge::hasContact(uint32_t id) const {
+  auto contacts = getContacts();
+  for (const auto& contact : contacts) {
+    if (contact.id == id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool MeshBridge::isFavoriteContact(uint32_t id) const {
+  return std::find(_favoriteContactIds.begin(), _favoriteContactIds.end(), id) != _favoriteContactIds.end();
+}
+
+bool MeshBridge::setFavoriteContact(uint32_t id, bool favorite) {
+  auto it = std::find(_favoriteContactIds.begin(), _favoriteContactIds.end(), id);
+  if (favorite) {
+    if (it == _favoriteContactIds.end()) {
+      _favoriteContactIds.push_back(id);
+      return true;
+    }
+    return false;
+  }
+
+  if (it != _favoriteContactIds.end()) {
+    _favoriteContactIds.erase(it);
+    return true;
+  }
+  return false;
+}
+
+bool MeshBridge::toggleFavoriteContact(uint32_t id) {
+  const bool isFav = isFavoriteContact(id);
+  setFavoriteContact(id, !isFav);
+  return !isFav;
 }
 
 void MeshBridge::setThreadFilter(uint32_t id, bool isPrivate) {

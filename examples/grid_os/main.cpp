@@ -35,7 +35,6 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store, nullptr);
 
 namespace {
 TFT_eSPI tft = TFT_eSPI();
-std::vector<MeshBridge::ContactSummary> gContactSnapshot;
 
 constexpr uint8_t TOUCH_SDA = 5;
 constexpr uint8_t TOUCH_SCL = 6;
@@ -726,12 +725,8 @@ void setup() {
     }
   });
   bridge.setContactProvider([](std::vector<MeshBridge::ContactSummary>& out) {
-    out = gContactSnapshot;
-  });
-
-  gContactSnapshot.clear();
-  gContactSnapshot.reserve(64);
-  {
+    out.clear();
+    out.reserve(64);
     const uint32_t now = the_mesh.getRTCClock()->getCurrentTime();
     const int total = the_mesh.getNumContacts();
     constexpr int kProviderContactCap = 64;
@@ -773,14 +768,14 @@ void setup() {
       item.gpsLat = contact.gps_lat;
       item.gpsLon = contact.gps_lon;
       item.syncSince = contact.sync_since;
-      gContactSnapshot.push_back(item);
+      out.push_back(item);
 
       emitted++;
       if (emitted >= kProviderContactCap) {
         break;
       }
     }
-  }
+  });
 
   WindowManager& wm = WindowManager::instance();
   wm.begin(bridge);

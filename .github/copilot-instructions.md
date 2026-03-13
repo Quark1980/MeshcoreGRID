@@ -4,6 +4,15 @@ This repository extends MeshCore. Preserve MeshCore core behavior and data model
 
 MeshCore base code should remain untouched whenever possible so future upstream MeshCore updates can be integrated without unnecessary conflicts or regressions.
 
+## Single source of truth rule
+
+MeshCore is the single source of truth for all mesh/runtime behavior and persisted state.
+
+- Do not mirror, cache, or shadow MeshCore contact/channel/node/routing state in GRID-owned models.
+- Read and update authoritative state through existing MeshCore APIs and storage flows.
+- The only allowed GRID-owned state is GUI-specific presentation state (for example: selection, temporary filters, scroll position, widget visibility, local animation state).
+- GUI state must never become a parallel source of truth for MeshCore data.
+
 ## Core-first rule
 
 For all feature work, fixes, UI integrations, storage changes, protocol handling, BLE behavior, channel management, time handling, and mesh behavior:
