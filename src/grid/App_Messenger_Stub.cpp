@@ -17,6 +17,36 @@ constexpr lv_coord_t kBottomNavHeight = 52;
 lv_obj_t* gKeyboard = nullptr;
 lv_obj_t* gKeyboardTarget = nullptr;
 
+static const char* kKeyboardMapLower[] = {
+  "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
+  "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
+  LV_SYMBOL_UP, "z", "x", "c", "v", "b", "n", "m", LV_SYMBOL_BACKSPACE, "\n",
+  "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+static const char* kKeyboardMapUpper[] = {
+  "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
+  "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
+  "abc", "Z", "X", "C", "V", "B", "N", "M", LV_SYMBOL_BACKSPACE, "\n",
+  "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+static const char* kKeyboardMapSpecial[] = {
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
+  "-", "/", ":", ";", "(", ")", "$", "&", "@", "\"", "\n",
+  "ABC", ".", ",", "?", "!", "'", "_", LV_SYMBOL_BACKSPACE, "\n",
+  "abc", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+void applyGridKeyboardLayout(lv_obj_t* keyboard) {
+  if (keyboard == nullptr) {
+    return;
+  }
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kKeyboardMapLower, nullptr);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kKeyboardMapUpper, nullptr);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_SPECIAL, kKeyboardMapSpecial, nullptr);
+}
+
 void animHeightExec(void* var, int32_t value) {
   lv_obj_set_height(static_cast<lv_obj_t*>(var), value);
 }
@@ -380,12 +410,18 @@ private:
 
     uint16_t tab = lv_tabview_get_tab_act(self->_tabview);
     if (tab == 1) {
+      if (self->_addChannelBtn != nullptr) {
+        lv_obj_add_flag(self->_addChannelBtn, LV_OBJ_FLAG_HIDDEN);
+      }
       WindowManager::instance().setRightNavAction(LV_SYMBOL_SETTINGS " Sort", [self]() { self->toggleContactSort(); });
       if (!self->_contactsLoaded) {
         self->refreshContactList();
         self->_contactsLoaded = true;
       }
     } else {
+      if (self->_addChannelBtn != nullptr) {
+        lv_obj_clear_flag(self->_addChannelBtn, LV_OBJ_FLAG_HIDDEN);
+      }
       WindowManager::instance().resetRightNavAction();
     }
   }
@@ -543,6 +579,7 @@ private:
     lv_obj_align(gKeyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_flag(gKeyboard, LV_OBJ_FLAG_HIDDEN);
     lv_keyboard_set_mode(gKeyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+    applyGridKeyboardLayout(gKeyboard);
 
     lv_obj_set_style_bg_color(gKeyboard, lv_color_hex(0x101820), 0);
     lv_obj_set_style_bg_opa(gKeyboard, LV_OPA_COVER, 0);
@@ -742,14 +779,17 @@ private:
     lv_obj_set_style_bg_opa(_channelsList, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(_channelsList, 0, 0);
 
-    _addChannelBtn = lv_btn_create(channelsTab);
-    lv_obj_set_size(_addChannelBtn, 34, 34);
-    lv_obj_align(_addChannelBtn, LV_ALIGN_TOP_RIGHT, -8, 6);
-    lv_obj_set_style_radius(_addChannelBtn, LV_RADIUS_CIRCLE, 0);
-    lv_obj_add_event_cb(_addChannelBtn, onAddChannelButton, LV_EVENT_CLICKED, this);
-    lv_obj_t* addLabel = lv_label_create(_addChannelBtn);
-    lv_label_set_text(addLabel, LV_SYMBOL_PLUS);
-    lv_obj_center(addLabel);
+    if (_addChannelBtn == nullptr) {
+      _addChannelBtn = lv_btn_create(_header);
+      lv_obj_set_size(_addChannelBtn, 34, 34);
+      lv_obj_align(_addChannelBtn, LV_ALIGN_RIGHT_MID, -6, 0);
+      lv_obj_set_style_radius(_addChannelBtn, LV_RADIUS_CIRCLE, 0);
+      lv_obj_add_event_cb(_addChannelBtn, onAddChannelButton, LV_EVENT_CLICKED, this);
+      lv_obj_t* addLabel = lv_label_create(_addChannelBtn);
+      lv_label_set_text(addLabel, LV_SYMBOL_PLUS);
+      lv_obj_center(addLabel);
+    }
+    lv_obj_clear_flag(_addChannelBtn, LV_OBJ_FLAG_HIDDEN);
 
     _contactsList = lv_list_create(contactsTab);
     lv_obj_set_size(_contactsList, LV_PCT(100), LV_PCT(100));
@@ -1265,6 +1305,9 @@ private:
 
     clearContent();
     lv_obj_update_layout(_content);
+    if (_addChannelBtn != nullptr) {
+      lv_obj_add_flag(_addChannelBtn, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(_backBtn, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(_title, isPrivate ? "Direct Chat" : "Channel Chat");
     WindowManager::instance().setRightNavAction(LV_SYMBOL_EDIT " Write", [this]() { showComposer(); });

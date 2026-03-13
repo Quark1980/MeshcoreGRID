@@ -14,26 +14,50 @@ void registerMessengerStubApp(WindowManager& wm, MeshBridge& bridge);
 
 namespace {
 
+static const char* kKeyboardMapLower[] = {
+  "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
+  "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
+  LV_SYMBOL_UP, "z", "x", "c", "v", "b", "n", "m", LV_SYMBOL_BACKSPACE, "\n",
+  "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+static const char* kKeyboardMapUpper[] = {
+  "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
+  "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
+  "abc", "Z", "X", "C", "V", "B", "N", "M", LV_SYMBOL_BACKSPACE, "\n",
+  "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+static const char* kKeyboardMapSpecial[] = {
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
+  "-", "/", ":", ";", "(", ")", "$", "&", "@", "\"", "\n",
+  "ABC", ".", ",", "?", "!", "'", "_", LV_SYMBOL_BACKSPACE, "\n",
+  "abc", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
+};
+
+void applyGridKeyboardLayout(lv_obj_t* keyboard) {
+  if (keyboard == nullptr) {
+    return;
+  }
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER, kKeyboardMapLower, nullptr);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_TEXT_UPPER, kKeyboardMapUpper, nullptr);
+  lv_keyboard_set_map(keyboard, LV_KEYBOARD_MODE_SPECIAL, kKeyboardMapSpecial, nullptr);
+}
+
 class NodesApp : public MeshApp {
 public:
   explicit NodesApp(MeshBridge* bridge)
       : _bridge(bridge), _list(nullptr), _countLabel(nullptr), _showingEmptyState(false) {}
   void release() override { this->~NodesApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
-    lv_obj_t* title = lv_label_create(layout);
-    lv_label_set_text(title, "Nodes Heard");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xEDF4FF), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 14, 12);
-
     _countLabel = lv_label_create(layout);
     lv_obj_set_style_text_font(_countLabel, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(_countLabel, lv_color_hex(0x9FAABB), 0);
-    lv_obj_align(_countLabel, LV_ALIGN_TOP_RIGHT, -14, 16);
+    lv_obj_align(_countLabel, LV_ALIGN_TOP_RIGHT, -14, 8);
 
     _list = lv_list_create(layout);
-    lv_obj_set_size(_list, LV_PCT(100), LV_PCT(86));
-    lv_obj_align(_list, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(_list, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(_list, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_color(_list, lv_color_hex(0x101820), 0);
     lv_obj_set_style_bg_opa(_list, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(_list, 0, 0);
@@ -120,14 +144,9 @@ public:
   SimpleCardApp(const char* title, const char* subtitle) : _title(title), _subtitle(subtitle) {}
   void release() override { this->~SimpleCardApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
-    lv_obj_t* t = lv_label_create(layout);
-    lv_label_set_text(t, _title);
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
-
     lv_obj_t* card = lv_obj_create(layout);
     lv_obj_set_size(card, LV_PCT(92), 112);
-    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 56);
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 12);
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
@@ -155,14 +174,9 @@ public:
         _lastRefreshMs(0) {}
   void release() override { this->~RadioApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
-    lv_obj_t* t = lv_label_create(layout);
-    lv_label_set_text(t, "Radio");
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
-
     _tabview = lv_tabview_create(layout, LV_DIR_TOP, 36);
-    lv_obj_set_size(_tabview, LV_PCT(96), LV_PCT(84));
-    lv_obj_align(_tabview, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_size(_tabview, LV_PCT(100), LV_PCT(100));
+    lv_obj_align(_tabview, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_obj_t* advertTab = lv_tabview_add_tab(_tabview, "Advert");
     lv_obj_t* metricsTab = lv_tabview_add_tab(_tabview, "Metrics");
@@ -336,14 +350,9 @@ class BleApp : public MeshApp {
 public:
   void release() override { this->~BleApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
-    lv_obj_t* t = lv_label_create(layout);
-    lv_label_set_text(t, "BLE");
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
-
     lv_obj_t* card = lv_obj_create(layout);
     lv_obj_set_size(card, LV_PCT(92), 212);
-    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 56);
+    lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 8);
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);
     lv_obj_set_style_border_color(card, lv_color_hex(0x2F3947), 0);
@@ -452,18 +461,13 @@ public:
   void onStart(lv_obj_t* layout) override {
     _layout = layout;
 
-    lv_obj_t* t = lv_label_create(layout);
-    lv_label_set_text(t, "Settings");
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
-
     _hint = lv_label_create(layout);
     lv_label_set_text(_hint, "Tap a setting to edit with keyboard");
     lv_obj_set_style_text_color(_hint, lv_color_hex(0x9FAABB), 0);
-    lv_obj_align(_hint, LV_ALIGN_TOP_LEFT, 16, 42);
+    lv_obj_align(_hint, LV_ALIGN_TOP_LEFT, 16, 10);
 
     _list = lv_list_create(layout);
-    lv_obj_set_size(_list, LV_PCT(100), LV_PCT(82));
+    lv_obj_set_size(_list, LV_PCT(100), LV_PCT(90));
     lv_obj_align(_list, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_set_style_border_width(_list, 0, 0);
     lv_obj_set_style_bg_color(_list, lv_color_hex(0x101820), 0);
@@ -654,6 +658,7 @@ private:
     lv_keyboard_set_textarea(_keyboard, _editorInput);
     lv_obj_add_event_cb(_keyboard, onKeyboardCancel, LV_EVENT_CANCEL, this);
     lv_keyboard_set_mode(_keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+    applyGridKeyboardLayout(_keyboard);
   }
 
   void closeEditor() {
@@ -761,18 +766,13 @@ class PowerApp : public MeshApp {
 public:
   void release() override { this->~PowerApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
-    lv_obj_t* t = lv_label_create(layout);
-    lv_label_set_text(t, "Power");
-    lv_obj_set_style_text_font(t, &lv_font_montserrat_20, 0);
-    lv_obj_align(t, LV_ALIGN_TOP_LEFT, 14, 12);
-
     _batt = lv_label_create(layout);
-    lv_obj_align(_batt, LV_ALIGN_TOP_LEFT, 16, 56);
+    lv_obj_align(_batt, LV_ALIGN_TOP_LEFT, 16, 16);
     refreshBattery();
 
     lv_obj_t* reboot = lv_btn_create(layout);
     lv_obj_set_size(reboot, 120, 44);
-    lv_obj_align(reboot, LV_ALIGN_TOP_LEFT, 16, 94);
+    lv_obj_align(reboot, LV_ALIGN_TOP_LEFT, 16, 54);
     lv_obj_t* rbLbl = lv_label_create(reboot);
     lv_label_set_text(rbLbl, "Reboot");
     lv_obj_center(rbLbl);
@@ -780,7 +780,7 @@ public:
 
     lv_obj_t* sleep = lv_btn_create(layout);
     lv_obj_set_size(sleep, 120, 44);
-    lv_obj_align(sleep, LV_ALIGN_TOP_LEFT, 156, 94);
+    lv_obj_align(sleep, LV_ALIGN_TOP_LEFT, 156, 54);
     lv_obj_t* slLbl = lv_label_create(sleep);
     lv_label_set_text(slLbl, "Hibernate");
     lv_obj_center(slLbl);
