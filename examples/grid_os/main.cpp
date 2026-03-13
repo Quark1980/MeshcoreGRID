@@ -4,7 +4,10 @@
 #include <Wire.h>
 #include <cmath>
 #include <cstring>
+
+
 #include <lvgl.h>
+extern "C" void lv_tick_inc(uint32_t ms);
 
 #include <Mesh.h>
 #ifdef BLE_PIN_CODE
@@ -33,6 +36,44 @@ ArduinoSerialInterface serial_interface;
 StdRNG fast_rng;
 SimpleMeshTables tables;
 MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store, nullptr);
+
+// --- GRID UI performance/power helpers (visible to all code) ---
+#include <esp_system.h>
+#include <esp_pm.h>
+#include <esp_spi_flash.h>
+#include <esp_heap_caps.h>
+
+void setCpuFrequencyMhz(int mhz) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  // Only works on ESP32/ESP32S3
+  setCpuFrequencyMhz(mhz);
+#else
+  (void)mhz;
+#endif
+}
+
+void setSpiFlashFrequency(int hz) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  // Not all boards support changing flash/psram freq at runtime; stub for now
+  (void)hz;
+#else
+  (void)hz;
+#endif
+}
+
+void* allocUiBuffer(size_t bytes, bool preferInternal) {
+#if CONFIG_IDF_TARGET_ESP32S3
+  int caps = preferInternal ? MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT : MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+  void* ptr = heap_caps_malloc(bytes, caps);
+  if (!ptr && !preferInternal) {
+    // Fallback to internal if PSRAM fails
+    ptr = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
+  return ptr;
+#else
+  return malloc(bytes);
+#endif
+}
 
 namespace {
 TFT_eSPI tft = TFT_eSPI();
@@ -258,6 +299,22 @@ void wakeDisplay() {
   lv_obj_invalidate(lv_scr_act());
   lv_refr_now(nullptr);
 
+  // --- Performance boost for UI on ---
+  setCpuFrequencyMhz(240); // Max CPU speed
+  setSpiFlashFrequency(80000000); // Max SPI flash/PSRAM speed (if supported)
+  // Reallocate UI buffer to internal SRAM for max speed (if possible)
+  extern lv_color_t* buf1;
+  extern lv_disp_draw_buf_t drawBuf;
+  const uint32_t horRes = 320;
+  const uint32_t lineCount = 40;
+  void* newBuf = allocUiBuffer(horRes * lineCount * sizeof(lv_color_t), true);
+  if (newBuf && newBuf != buf1) {
+    lv_disp_draw_buf_init(&drawBuf, newBuf, nullptr, horRes * lineCount);
+    if (buf1) heap_caps_free(buf1);
+    buf1 = (lv_color_t*)newBuf;
+  }
+  // --- End performance boost ---
+
   if (gRxWhileScreenOffCount > 0) {
     showRxDebugOverlay(gRxWhileScreenOffCount);
     gRxWhileScreenOffCount = 0;
@@ -269,7 +326,22 @@ void sleepDisplay() {
     return;
   }
 
+  // --- Power save for screen off ---
   setBacklightEnabled(false);
+  setCpuFrequencyMhz(80); // Drop CPU to 80MHz for power save
+  setSpiFlashFrequency(40000000); // Drop SPI flash/PSRAM to 40MHz (if supported)
+  // Optionally move UI buffer to PSRAM for power save (not strictly required)
+  extern lv_color_t* buf1;
+  extern lv_disp_draw_buf_t drawBuf;
+  const uint32_t horRes = 320;
+  const uint32_t lineCount = 40;
+  void* newBuf = allocUiBuffer(horRes * lineCount * sizeof(lv_color_t), false);
+  if (newBuf && newBuf != buf1) {
+    lv_disp_draw_buf_init(&drawBuf, newBuf, nullptr, horRes * lineCount);
+    if (buf1) heap_caps_free(buf1);
+    buf1 = (lv_color_t*)newBuf;
+  }
+  // --- End power save ---
   gDisplaySleeping = true;
 }
 
@@ -713,8 +785,12 @@ void setup() {
 
   const uint32_t horRes = 320;
   const uint32_t lineCount = 40;
-  buf1 = static_cast<lv_color_t*>(heap_caps_malloc(horRes * lineCount * sizeof(lv_color_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  lv_disp_draw_buf_init(&drawBuf, buf1, nullptr, horRes * lineCount);
+  void* newBuf = allocUiBuffer(horRes * lineCount * sizeof(lv_color_t), true);
+  if (newBuf && newBuf != buf1) {
+    lv_disp_draw_buf_init(&drawBuf, newBuf, nullptr, horRes * lineCount);
+    if (buf1) heap_caps_free(buf1);
+    buf1 = (lv_color_t*)newBuf;
+  }
 
   static lv_disp_drv_t dispDrv;
   lv_disp_drv_init(&dispDrv);
