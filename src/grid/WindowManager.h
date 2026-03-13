@@ -72,6 +72,7 @@ private:
 
   lv_obj_t* _root;
   lv_obj_t* _statusBar;
+  lv_obj_t* _statusClockLabel;
   lv_obj_t* _statusSignalLabel;
   lv_obj_t* _statusSignalBars[4];
   lv_obj_t* _statusBleLabel;
@@ -88,5 +89,6 @@ private:
   lv_style_t _styleStatus;
   lv_style_t _styleNav;
   lv_style_t _styleButton;
+  uint32_t _lastClockUpdateMs;
   uint32_t _lastBatteryUpdateMs;
 };

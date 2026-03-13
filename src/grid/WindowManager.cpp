@@ -1,6 +1,7 @@
 #include "WindowManager.h"
 
 #include <algorithm>
+#include <time.h>
 
 #include "target.h"
 
@@ -50,6 +51,7 @@ WindowManager::WindowManager()
       _activeApp(nullptr),
       _root(nullptr),
       _statusBar(nullptr),
+  _statusClockLabel(nullptr),
   _statusSignalLabel(nullptr),
   _statusSignalBars{nullptr, nullptr, nullptr, nullptr},
   _statusBleLabel(nullptr),
@@ -60,6 +62,7 @@ WindowManager::WindowManager()
       _contentRoot(nullptr),
     _activeScreen(nullptr),
     _rightNavHandler(nullptr),
+    _lastClockUpdateMs(0),
     _lastBatteryUpdateMs(0) {}
 
 bool WindowManager::begin(MeshBridge& bridge, lv_obj_t* root) {
@@ -83,6 +86,19 @@ void WindowManager::tick() {
   if (_root != nullptr && (now - sLastButtonStylePassMs) >= 250) {
     sLastButtonStylePassMs = now;
     applyAmberButtonOutlineRecursive(_root);
+  }
+
+  if (_statusClockLabel != nullptr && (now - _lastClockUpdateMs) >= 1000) {
+    _lastClockUpdateMs = now;
+
+    time_t epochNow;
+    time(&epochNow);
+    const uint32_t secDay = static_cast<uint32_t>(epochNow % (24 * 3600));
+    const uint32_t hh = secDay / 3600;
+    const uint32_t mm = (secDay % 3600) / 60;
+    char clockText[8];
+    snprintf(clockText, sizeof(clockText), "%02lu:%02lu", static_cast<unsigned long>(hh), static_cast<unsigned long>(mm));
+    lv_label_set_text(_statusClockLabel, clockText);
   }
 
   if (_statusBatteryLabel != nullptr && (now - _lastBatteryUpdateMs) >= 5000) {
@@ -220,10 +236,10 @@ void WindowManager::buildShell(lv_obj_t* root) {
 }
 
 void WindowManager::buildStatusBar() {
-  lv_obj_t* clock = lv_label_create(_statusBar);
-  lv_label_set_text(clock, "12:00");
-  lv_obj_align(clock, LV_ALIGN_LEFT_MID, 10, 0);
-  lv_obj_set_style_text_color(clock, lv_color_hex(COLOR_TEXT), 0);
+  _statusClockLabel = lv_label_create(_statusBar);
+  lv_label_set_text(_statusClockLabel, "--:--");
+  lv_obj_align(_statusClockLabel, LV_ALIGN_LEFT_MID, 10, 0);
+  lv_obj_set_style_text_color(_statusClockLabel, lv_color_hex(COLOR_TEXT), 0);
 
   lv_obj_t* meter = lv_obj_create(_statusBar);
   lv_obj_remove_style_all(meter);

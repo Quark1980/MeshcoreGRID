@@ -21,33 +21,6 @@ uint32_t pubKeyPrefixToU32(const uint8_t* key) {
 #include <algorithm>
 #include <vector>
 
-namespace {
-constexpr uint32_t kMinReasonableEpoch = 1700000000UL;    // ~2023-11
-constexpr uint32_t kForwardSyncThresholdSec = 60;         // ignore tiny jitter
-constexpr uint32_t kMaxForwardJumpSec = 31UL * 24UL * 3600UL; // guard against bogus far-future nodes
-
-// Sync local RTC from mesh-origin timestamps in a forward-only, bounded way.
-void maybeSyncRtcFromMeshTimestamp(mesh::RTCClock* rtc, uint32_t candidateEpoch) {
-  if (rtc == nullptr || candidateEpoch < kMinReasonableEpoch) {
-    return;
-  }
-
-  const uint32_t current = rtc->getCurrentTime();
-  if (current < kMinReasonableEpoch) {
-    rtc->setCurrentTime(candidateEpoch);
-    return;
-  }
-  if (candidateEpoch <= current + kForwardSyncThresholdSec) {
-    return;
-  }
-
-  const uint32_t delta = candidateEpoch - current;
-  if (delta <= kMaxForwardJumpSec) {
-    rtc->setCurrentTime(candidateEpoch);
-  }
-}
-}
-
 #define CMD_APP_START                 1
 #define CMD_SEND_TXT_MSG              2
 #define CMD_SEND_CHANNEL_TXT_MSG      3
@@ -403,7 +376,6 @@ void MyMesh::onContactsFull() {
 }
 
 void MyMesh::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) {
-  maybeSyncRtcFromMeshTimestamp(getRTCClock(), contact.last_advert_timestamp);
 #if GRID_OS_BOOT
   MeshBridge::instance().publishEvent(GRID_EVT_NODE_ADVERT, contact.name, contact.name, 0, 0, getRTCClock()->getCurrentTime());
 #endif
@@ -577,7 +549,6 @@ void MyMesh::sendFloodScoped(const mesh::GroupChannel& channel, mesh::Packet* pk
 
 void MyMesh::onMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
                            const char *text) {
-  maybeSyncRtcFromMeshTimestamp(getRTCClock(), sender_timestamp);
   markConnectionActive(from); // in case this is from a server, and we have a connection
 #if GRID_OS_BOOT
   if (pkt && pkt->payload_len > 0) {
@@ -616,7 +587,6 @@ void MyMesh::onCommandDataRecv(const ContactInfo &from, mesh::Packet *pkt, uint3
 
 void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uint32_t sender_timestamp,
                                  const uint8_t *sender_prefix, const char *text) {
-  maybeSyncRtcFromMeshTimestamp(getRTCClock(), sender_timestamp);
   markConnectionActive(from);
   // from.sync_since change needs to be persisted
   dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
@@ -625,7 +595,6 @@ void MyMesh::onSignedMessageRecv(const ContactInfo &from, mesh::Packet *pkt, uin
 
 void MyMesh::onChannelMessageRecv(const mesh::GroupChannel &channel, mesh::Packet *pkt, uint32_t timestamp,
                                   const char *text) {
-  maybeSyncRtcFromMeshTimestamp(getRTCClock(), timestamp);
   uint8_t channel_idx = findChannelIdx(channel);
 #if GRID_OS_BOOT
   const char* senderName = "Unknown";
@@ -1074,7 +1043,9 @@ bool MyMesh::syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSa
   const uint32_t now = rtc->getCurrentTime();
   constexpr uint32_t kMinReasonableEpoch = 1700000000UL;              // ~2023-11
   constexpr uint32_t kMaxAdvertAge = 120UL * 24UL * 3600UL;           // 120 days
+  constexpr uint32_t kMaxSkewFromNow = 7UL * 24UL * 3600UL;           // ignore nodes too far from local clock
   constexpr uint32_t kMinForwardApplyDelta = 30UL;                    // avoid tiny jitter
+  const bool hasReasonableNow = (now >= kMinReasonableEpoch);
 
   std::vector<uint32_t> estimates;
   const int total = getNumContacts();
@@ -1101,7 +1072,15 @@ bool MyMesh::syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSa
     if (est64 > 0xFFFFFFFFULL) {
       continue;
     }
-    estimates.push_back(static_cast<uint32_t>(est64));
+
+    const uint32_t estimated = static_cast<uint32_t>(est64);
+    if (hasReasonableNow) {
+      const uint32_t skew = (estimated > now) ? (estimated - now) : (now - estimated);
+      if (skew > kMaxSkewFromNow) {
+        continue;
+      }
+    }
+    estimates.push_back(estimated);
   }
 
   if (estimates.empty()) {
