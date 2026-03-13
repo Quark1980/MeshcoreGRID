@@ -45,7 +45,7 @@ constexpr uint8_t TOUCH_RST = 41;
 constexpr uint8_t FT6336U_ADDR = 0x38;
 constexpr uint8_t kBacklightOnLevel = 200;
 constexpr const char* kScreenTimeoutFile = "/grid_screen_timeout.txt";
-constexpr const char* kGridVersion = "v0.6.0";
+constexpr const char* kGridVersion = "v0.7.0-BETA1";
 constexpr const char* kGridAuthor = "M.Seijkens";
 
 // Touch calibration profile for Heltec V4 (rotation 0, 320x480 UI)
@@ -231,12 +231,20 @@ bool sendQueuedOutboxItem(const MeshBridge::OutboxItem& item) {
 
       uint32_t expectedAck = 0;
       uint32_t estTimeout = 0;
-      return the_mesh.sendMessage(contact,
-                                  item.timestamp,
-                                  0,
-                                  item.text,
-                                  expectedAck,
-                                  estTimeout) != MSG_SEND_FAILED;
+      const int sendResult = the_mesh.sendMessage(contact,
+                                                  item.timestamp,
+                                                  0,
+                                                  item.text,
+                                                  expectedAck,
+                                                  estTimeout);
+      if (sendResult == MSG_SEND_FAILED) {
+        return false;
+      }
+
+      if (expectedAck != 0) {
+        the_mesh.noteExpectedAckForContact(contact, expectedAck);
+      }
+      return true;
     }
     return false;
   }
@@ -436,7 +444,7 @@ void showSplash() {
   lv_obj_t* tagline = lv_label_create(splash);
   lv_obj_set_style_text_color(tagline, lv_color_hex(0x78CFFF), 0);
   lv_obj_set_style_text_font(tagline, &lv_font_montserrat_14, 0);
-  lv_label_set_text(tagline, "Mesh network initializing");
+  lv_label_set_text(tagline, "Mesh network initializing...");
   lv_obj_align(tagline, LV_ALIGN_TOP_MID, 0, 68);
 
   lv_obj_t* net = lv_obj_create(splash);
@@ -496,7 +504,7 @@ void showSplash() {
 
   lv_obj_t* version = lv_label_create(splash);
   lv_obj_set_style_text_color(version, lv_color_hex(0x79D6FF), 0);
-  lv_obj_set_style_text_font(version, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(version, &lv_font_montserrat_16, 0);
   char versionText[40];
   snprintf(versionText, sizeof(versionText), "Version %s", kGridVersion);
   lv_label_set_text(version, versionText);
@@ -516,25 +524,25 @@ void showSplash() {
   lv_obj_align(sub, LV_ALIGN_BOTTOM_MID, 0, -10);
 
   uint32_t t0 = millis();
-  while (millis() - t0 < 2500) {
+  while (millis() - t0 < 2800) {
     const uint32_t elapsed = millis() - t0;
 
     for (uint8_t i = 0; i < 7; ++i) {
-      const uint32_t phase = (elapsed + i * 120) % 700;
-      const lv_opa_t haloOpa = static_cast<lv_opa_t>(12 + (phase < 350 ? phase / 10 : (700 - phase) / 10));
+      const uint32_t phase = (elapsed + i * 140) % 900;
+      const lv_opa_t haloOpa = static_cast<lv_opa_t>(16 + (phase < 450 ? phase / 12 : (900 - phase) / 12));
       lv_obj_set_style_bg_opa(halos[i], haloOpa, 0);
 
-      const lv_color_t nodeColor = (phase < 180) ? lv_color_hex(0xD7F1FF) : lv_color_hex(0x8FD6FF);
+      const lv_color_t nodeColor = (phase < 260) ? lv_color_hex(0xD7F1FF) : lv_color_hex(0x8FD6FF);
       lv_obj_set_style_bg_color(nodes[i], nodeColor, 0);
     }
 
     for (uint8_t i = 0; i < 9; ++i) {
-      const uint32_t phase = (elapsed + i * 80) % 500;
-      const lv_opa_t opa = static_cast<lv_opa_t>(120 + (phase < 250 ? phase / 5 : (500 - phase) / 5));
+      const uint32_t phase = (elapsed + i * 95) % 700;
+      const lv_opa_t opa = static_cast<lv_opa_t>(90 + (phase < 350 ? phase / 5 : (700 - phase) / 5));
       lv_obj_set_style_line_opa(links[i], opa, 0);
     }
 
-    const uint32_t segMs = 170;
+    const uint32_t segMs = 200;
     const uint8_t segCount = static_cast<uint8_t>(sizeof(kPath) - 1);
     const uint32_t routePos = (elapsed / segMs) % segCount;
     const uint32_t inSeg = elapsed % segMs;
@@ -544,9 +552,9 @@ void showSplash() {
     const int16_t py = static_cast<int16_t>(a.y + ((b.y - a.y) * static_cast<int32_t>(inSeg)) / static_cast<int32_t>(segMs));
     lv_obj_align(packet, LV_ALIGN_TOP_LEFT, px - 4, py - 4);
 
-    lv_tick_inc(10);
+    lv_tick_inc(16);
     lv_timer_handler();
-    delay(10);
+    delay(16);
   }
 
   lv_obj_del(splash);
@@ -778,6 +786,9 @@ void setup() {
   });
   bridge.setAddDiscoveredContactHandler([](uint32_t contactId) {
     return the_mesh.addDiscoveredContactById(contactId);
+  });
+  bridge.setFavoriteContactHandler([](uint32_t contactId, bool favorite) {
+    return the_mesh.setContactFavoriteById(contactId, favorite);
   });
 
   WindowManager& wm = WindowManager::instance();

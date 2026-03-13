@@ -33,6 +33,8 @@ public:
   bool openApp(const char* appId, bool pushToStack = true);
   void goBack();
   void goHome();
+  void setLeftNavAction(const char* label, std::function<void()> handler);
+  void resetLeftNavAction();
   void setRightNavAction(const char* label, std::function<void()> handler);
   void resetRightNavAction();
 
@@ -56,11 +58,13 @@ private:
   void updateStatusSignal();
   void createTheme();
   void powerPeripherals();
+  void updateChromeForActiveApp();
 
   void transitionTo(lv_obj_t* newScreen, bool fromRight);
   void destroyCurrentApp();
 
   static void onBackPressed(lv_event_t* e);
+  static void onLeftNavPressed(lv_event_t* e);
   static void onRightNavPressed(lv_event_t* e);
 
   MeshBridge* _bridge;
@@ -77,10 +81,13 @@ private:
   lv_obj_t* _statusBleLabel;
   lv_obj_t* _statusBatteryLabel;
   lv_obj_t* _navBar;
+  lv_obj_t* _leftNavButton;
+  lv_obj_t* _leftNavLabel;
   lv_obj_t* _rightNavButton;
   lv_obj_t* _rightNavLabel;
   lv_obj_t* _contentRoot;
   lv_obj_t* _activeScreen;
+  std::function<void()> _leftNavHandler;
   std::function<void()> _rightNavHandler;
 
   lv_style_t _styleShell;

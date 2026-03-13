@@ -7,6 +7,7 @@
 
 namespace {
 constexpr uint32_t kBridgeTaskStack = 6144;
+constexpr uint8_t kFavoriteFlagMask = 0x01;
 }
 
 MeshBridge& MeshBridge::instance() {
@@ -29,6 +30,7 @@ MeshBridge::MeshBridge()
   _bleToggleHandler(nullptr),
   _radioMetricsProvider(nullptr),
   _addDiscoveredContactHandler(nullptr),
+  _setFavoriteContactHandler(nullptr),
   _threadFilterEnabled(false),
   _threadFilterId(0),
   _threadFilterPrivate(false),
@@ -271,6 +273,10 @@ void MeshBridge::setAddDiscoveredContactHandler(AddDiscoveredContactHandler hand
   _addDiscoveredContactHandler = handler;
 }
 
+void MeshBridge::setFavoriteContactHandler(SetFavoriteContactHandler handler) {
+  _setFavoriteContactHandler = handler;
+}
+
 bool MeshBridge::refreshRadioMetrics() {
   if (!_radioMetricsProvider) {
     return false;
@@ -359,22 +365,18 @@ bool MeshBridge::addDiscoveredContactById(uint32_t id) {
 }
 
 bool MeshBridge::isFavoriteContact(uint32_t id) const {
-  return std::find(_favoriteContactIds.begin(), _favoriteContactIds.end(), id) != _favoriteContactIds.end();
+  auto contacts = getContacts();
+  for (const auto& contact : contacts) {
+    if (contact.id == id) {
+      return (contact.flags & kFavoriteFlagMask) != 0;
+    }
+  }
+  return false;
 }
 
 bool MeshBridge::setFavoriteContact(uint32_t id, bool favorite) {
-  auto it = std::find(_favoriteContactIds.begin(), _favoriteContactIds.end(), id);
-  if (favorite) {
-    if (it == _favoriteContactIds.end()) {
-      _favoriteContactIds.push_back(id);
-      return true;
-    }
-    return false;
-  }
-
-  if (it != _favoriteContactIds.end()) {
-    _favoriteContactIds.erase(it);
-    return true;
+  if (_setFavoriteContactHandler != nullptr) {
+    return _setFavoriteContactHandler(id, favorite);
   }
   return false;
 }
@@ -485,6 +487,32 @@ void MeshBridge::dispatchForUi(uint32_t maxMessagesPerTick) {
       }
       if (_activeApp != nullptr && _threadFilterEnabled &&
           msg.threadId == _threadFilterId && !_threadFilterPrivate) {
+        _activeApp->onMessageReceived(msg);
+      }
+      ++count;
+      continue;
+    }
+
+    // Handle direct-message ACK events: mark the latest pending local DM as delivered.
+    if (msg.packetType == GRID_EVT_DIRECT_ACK) {
+      const uint32_t key = makeThreadKey(msg.threadId, true);
+      auto hit = _threadHistory.find(key);
+      if (hit != _threadHistory.end()) {
+        for (auto it = hit->second.rbegin(); it != hit->second.rend(); ++it) {
+          if (!it->isLocal) {
+            continue;
+          }
+          if (it->timesHeard > 0) {
+            continue;
+          }
+          it->timesHeard = 1;
+          msg = *it;
+          msg.packetType = GRID_EVT_DIRECT_ACK;
+          break;
+        }
+      }
+      if (_activeApp != nullptr && _threadFilterEnabled &&
+          msg.threadId == _threadFilterId && _threadFilterPrivate) {
         _activeApp->onMessageReceived(msg);
       }
       ++count;

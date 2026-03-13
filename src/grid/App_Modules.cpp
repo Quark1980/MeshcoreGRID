@@ -18,7 +18,7 @@ namespace {
 static const char* kKeyboardMapLower[] = {
   "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
   "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
-  LV_SYMBOL_UP, "z", "x", "c", "v", "b", "n", "m", LV_SYMBOL_BACKSPACE, "\n",
+  "ABC", "z", "x", "c", "v", "b", "n", "m", LV_SYMBOL_BACKSPACE, "\n",
   "1#", LV_SYMBOL_LEFT, " ", LV_SYMBOL_RIGHT, LV_SYMBOL_OK, ""
 };
 
@@ -74,7 +74,12 @@ public:
   };
 
   explicit NodesApp(MeshBridge* bridge)
-      : _bridge(bridge), _list(nullptr), _countLabel(nullptr), _showingEmptyState(false) {}
+    : _bridge(bridge),
+      _list(nullptr),
+      _countLabel(nullptr),
+      _emptyPopup(nullptr),
+      _showingEmptyState(false),
+      _lastAddButtonRefreshMs(0) {}
   void release() override { this->~NodesApp(); heap_caps_free(this); }
   void onStart(lv_obj_t* layout) override {
     _countLabel = lv_label_create(layout);
@@ -90,19 +95,62 @@ public:
     lv_obj_set_style_border_width(_list, 0, 0);
     lv_obj_set_scrollbar_mode(_list, LV_SCROLLBAR_MODE_AUTO);
 
+    _emptyPopup = lv_obj_create(layout);
+    lv_obj_set_size(_emptyPopup, LV_PCT(86), 120);
+    lv_obj_align(_emptyPopup, LV_ALIGN_CENTER, 0, 8);
+    lv_obj_set_style_bg_color(_emptyPopup, lv_color_hex(0x1A2532), 0);
+    lv_obj_set_style_bg_opa(_emptyPopup, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(_emptyPopup, 2, 0);
+    lv_obj_set_style_border_color(_emptyPopup, lv_color_hex(0x32455C), 0);
+    lv_obj_set_style_radius(_emptyPopup, 14, 0);
+    lv_obj_set_style_pad_all(_emptyPopup, 14, 0);
+    lv_obj_clear_flag(_emptyPopup, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* popupTitle = lv_label_create(_emptyPopup);
+    lv_label_set_text(popupTitle, "Discover");
+    lv_obj_set_style_text_font(popupTitle, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(popupTitle, lv_color_hex(0xEDF4FF), 0);
+    lv_obj_align(popupTitle, LV_ALIGN_TOP_MID, 0, 2);
+
+    lv_obj_t* popupBody = lv_label_create(_emptyPopup);
+    lv_label_set_text(popupBody, "No adverts heard this boot\nWaiting for nearby nodes...");
+    lv_obj_set_style_text_font(popupBody, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(popupBody, lv_color_hex(0xAFC2D8), 0);
+    lv_obj_set_style_text_align(popupBody, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(popupBody, LV_ALIGN_CENTER, 0, 12);
+
     populateBootAdverts();
 
     if (_bridge) {
       _bridge->subscribe(GRID_EVT_NODE_ADVERT, [this](const MeshMessage& msg) { onMessageReceived(msg); });
     }
   }
-  void onLoop() override {}
+  void onLoop() override {
+    if (_bridge == nullptr || _addBindings.empty()) {
+      return;
+    }
+
+    const uint32_t nowMs = millis();
+    if (nowMs - _lastAddButtonRefreshMs < 500) {
+      return;
+    }
+    _lastAddButtonRefreshMs = nowMs;
+
+    for (const auto& binding : _addBindings) {
+      if (_bridge->hasContact(binding.contactId)) {
+        renderAdvertsNewestFirst();
+        return;
+      }
+    }
+  }
   void onClose() override {
     if (_bridge) _bridge->clearSubscribers(GRID_EVT_NODE_ADVERT);
     _addBindings.clear();
     _list = nullptr;
     _countLabel = nullptr;
+    _emptyPopup = nullptr;
     _showingEmptyState = false;
+    _lastAddButtonRefreshMs = 0;
   }
   void onMessageReceived(MeshMessage msg) override {
     if (_list == nullptr || msg.packetType != GRID_EVT_NODE_ADVERT) return;
@@ -220,12 +268,18 @@ private:
     lv_obj_clean(_list);
     const auto adverts = _bridge->getBootNodeAdverts();
     if (adverts.empty()) {
-      lv_obj_t* item = lv_list_add_text(_list, "No adverts heard this boot");
-      lv_obj_set_style_text_color(item, lv_color_hex(0xEDF4FF), 0);
-      lv_obj_set_style_text_font(item, &lv_font_montserrat_14, 0);
+      lv_obj_add_flag(_list, LV_OBJ_FLAG_HIDDEN);
+      if (_emptyPopup != nullptr) {
+        lv_obj_clear_flag(_emptyPopup, LV_OBJ_FLAG_HIDDEN);
+      }
       _showingEmptyState = true;
       updateCountLabel();
       return;
+    }
+
+    lv_obj_clear_flag(_list, LV_OBJ_FLAG_HIDDEN);
+    if (_emptyPopup != nullptr) {
+      lv_obj_add_flag(_emptyPopup, LV_OBJ_FLAG_HIDDEN);
     }
 
     auto sorted = adverts;
@@ -257,7 +311,9 @@ private:
   MeshBridge* _bridge;
   lv_obj_t* _list;
   lv_obj_t* _countLabel;
+  lv_obj_t* _emptyPopup;
   bool _showingEmptyState;
+  uint32_t _lastAddButtonRefreshMs;
   std::vector<AddBinding> _addBindings;
 };
 

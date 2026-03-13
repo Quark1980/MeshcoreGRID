@@ -556,6 +556,64 @@ bool MyMesh::addDiscoveredContactById(uint32_t contactId) {
   return false;
 }
 
+bool MyMesh::setContactFavoriteById(uint32_t contactId, bool favorite) {
+  constexpr uint8_t kFavoriteFlagMask = 0x01;
+
+  const int total = getNumContacts();
+  for (int i = 0; i < total; ++i) {
+    ContactInfo contact;
+    if (!getContactByIdx(i, contact)) {
+      continue;
+    }
+
+    uint32_t existingId = 0;
+    memcpy(&existingId, contact.id.pub_key, sizeof(existingId));
+    if (existingId != contactId) {
+      continue;
+    }
+
+    const bool wasFavorite = (contact.flags & kFavoriteFlagMask) != 0;
+    if (wasFavorite == favorite) {
+      return true;
+    }
+
+    if (favorite) {
+      contact.flags |= kFavoriteFlagMask;
+    } else {
+      contact.flags &= static_cast<uint8_t>(~kFavoriteFlagMask);
+    }
+    contact.lastmod = getRTCClock()->getCurrentTime();
+
+    ContactInfo* existing = lookupContactByPubKey(contact.id.pub_key, PUB_KEY_SIZE);
+    if (existing == nullptr) {
+      return false;
+    }
+    *existing = contact;
+    existing->shared_secret_valid = false;
+    dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);
+    return true;
+  }
+
+  return false;
+}
+
+bool MyMesh::noteExpectedAckForContact(const ContactInfo& contact, uint32_t expectedAck) {
+  if (expectedAck == 0) {
+    return false;
+  }
+
+  ContactInfo* live = lookupContactByPubKey(contact.id.pub_key, PUB_KEY_SIZE);
+  if (live == nullptr) {
+    return false;
+  }
+
+  expected_ack_table[next_ack_idx].msg_sent = _ms->getMillis();
+  expected_ack_table[next_ack_idx].ack = expectedAck;
+  expected_ack_table[next_ack_idx].contact = live;
+  next_ack_idx = (next_ack_idx + 1) % EXPECTED_ACK_TABLE_SIZE;
+  return true;
+}
+
 void MyMesh::onContactPathUpdated(const ContactInfo &contact) {
 #if GRID_OS_BOOT
   uint32_t contactId = 0;
@@ -588,6 +646,24 @@ ContactInfo*  MyMesh::processAck(const uint8_t *data) {
       uint32_t trip_time = _ms->getMillis() - expected_ack_table[i].msg_sent;
       memcpy(&out_frame[5], &trip_time, 4);
       _serial->writeFrame(out_frame, 9);
+
+#if GRID_OS_BOOT
+      if (expected_ack_table[i].contact != nullptr) {
+        uint32_t contactId = 0;
+        memcpy(&contactId, expected_ack_table[i].contact->id.pub_key, sizeof(contactId));
+        char ackInfo[32] = {0};
+        snprintf(ackInfo, sizeof(ackInfo), "ack %lums", static_cast<unsigned long>(trip_time));
+        MeshBridge::instance().publishEvent(GRID_EVT_DIRECT_ACK,
+                                            ackInfo,
+                                            "You",
+                                            static_cast<int16_t>(_radio->getLastRSSI()),
+                                            static_cast<int8_t>(_radio->getLastSNR()),
+                                            getRTCClock()->getCurrentTime(),
+                                            contactId,
+                                            true,
+                                            0);
+      }
+#endif
 
       // NOTE: the same ACK can be received multiple times!
       expected_ack_table[i].ack = 0; // clear expected hash, now that we have received ACK

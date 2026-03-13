@@ -55,10 +55,13 @@ WindowManager::WindowManager()
   _statusBleLabel(nullptr),
   _statusBatteryLabel(nullptr),
       _navBar(nullptr),
+    _leftNavButton(nullptr),
+    _leftNavLabel(nullptr),
     _rightNavButton(nullptr),
     _rightNavLabel(nullptr),
       _contentRoot(nullptr),
     _activeScreen(nullptr),
+    _leftNavHandler(nullptr),
     _rightNavHandler(nullptr),
     _lastBatteryUpdateMs(0) {}
 
@@ -139,12 +142,15 @@ bool WindowManager::openApp(const char* appId, bool pushToStack) {
   lv_obj_add_style(nextScreen, &_styleShell, 0);
   lv_obj_set_size(nextScreen, LV_PCT(100), LV_PCT(100));
 
+  resetLeftNavAction();
+  resetRightNavAction();
   nextApp->onStart(nextScreen);
   transitionTo(nextScreen, true);
 
   destroyCurrentApp();
   _activeApp = nextApp;
   _activeId = it->id;
+  updateChromeForActiveApp();
 
   if (_bridge) {
     _bridge->setActiveApp(_activeApp);
@@ -178,6 +184,26 @@ void WindowManager::setRightNavAction(const char* label, std::function<void()> h
   }
   if (_rightNavButton != nullptr) {
     lv_obj_clear_flag(_rightNavButton, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void WindowManager::setLeftNavAction(const char* label, std::function<void()> handler) {
+  _leftNavHandler = std::move(handler);
+  if (_leftNavLabel != nullptr) {
+    lv_label_set_text(_leftNavLabel, (label != nullptr && label[0] != '\0') ? label : "");
+  }
+  if (_leftNavButton != nullptr) {
+    lv_obj_clear_flag(_leftNavButton, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+void WindowManager::resetLeftNavAction() {
+  _leftNavHandler = nullptr;
+  if (_leftNavLabel != nullptr) {
+    lv_label_set_text(_leftNavLabel, "");
+  }
+  if (_leftNavButton != nullptr) {
+    lv_obj_add_flag(_leftNavButton, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -301,15 +327,15 @@ void WindowManager::updateStatusSignal() {
 }
 
 void WindowManager::buildNavigationBar() {
-  lv_obj_t* back = lv_btn_create(_navBar);
-  lv_obj_add_style(back, &_styleButton, 0);
-  lv_obj_set_style_bg_color(back, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
-  lv_obj_set_size(back, 96, 36);
-  lv_obj_align(back, LV_ALIGN_LEFT_MID, 10, 0);
-  lv_obj_add_event_cb(back, onBackPressed, LV_EVENT_CLICKED, this);
-  lv_obj_t* backLabel = lv_label_create(back);
-  lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
-  lv_obj_center(backLabel);
+  _leftNavButton = lv_btn_create(_navBar);
+  lv_obj_add_style(_leftNavButton, &_styleButton, 0);
+  lv_obj_set_style_bg_color(_leftNavButton, lv_color_hex(0xFFB300), LV_STATE_PRESSED);
+  lv_obj_set_size(_leftNavButton, 108, 36);
+  lv_obj_align(_leftNavButton, LV_ALIGN_LEFT_MID, 10, 0);
+  lv_obj_add_event_cb(_leftNavButton, onLeftNavPressed, LV_EVENT_CLICKED, this);
+  _leftNavLabel = lv_label_create(_leftNavButton);
+  lv_obj_center(_leftNavLabel);
+  lv_obj_add_flag(_leftNavButton, LV_OBJ_FLAG_HIDDEN);
 
   _rightNavButton = lv_btn_create(_navBar);
   lv_obj_add_style(_rightNavButton, &_styleButton, 0);
@@ -320,6 +346,26 @@ void WindowManager::buildNavigationBar() {
   _rightNavLabel = lv_label_create(_rightNavButton);
   lv_obj_center(_rightNavLabel);
   resetRightNavAction();
+  resetLeftNavAction();
+}
+
+void WindowManager::updateChromeForActiveApp() {
+  const bool isHome = (_activeId == "home");
+  if (_navBar != nullptr) {
+    if (isHome) {
+      lv_obj_add_flag(_navBar, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_clear_flag(_navBar, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+
+  if (_contentRoot != nullptr) {
+    const lv_coord_t contentHeight = isHome
+        ? (LV_VER_RES - kStatusHeight)
+        : (LV_VER_RES - kStatusHeight - kNavHeight);
+    lv_obj_set_size(_contentRoot, LV_PCT(100), contentHeight);
+    lv_obj_align(_contentRoot, LV_ALIGN_TOP_MID, 0, kStatusHeight);
+  }
 }
 
 void WindowManager::createTheme() {
@@ -410,6 +456,13 @@ void WindowManager::onBackPressed(lv_event_t* e) {
   auto* self = static_cast<WindowManager*>(lv_event_get_user_data(e));
   if (self) {
     self->goBack();
+  }
+}
+
+void WindowManager::onLeftNavPressed(lv_event_t* e) {
+  auto* self = static_cast<WindowManager*>(lv_event_get_user_data(e));
+  if (self && self->_leftNavHandler) {
+    self->_leftNavHandler();
   }
 }
 

@@ -8,11 +8,11 @@
 #define FIRMWARE_VER_CODE 10
 
 #ifndef FIRMWARE_BUILD_DATE
-#define FIRMWARE_BUILD_DATE "6 Mar 2026"
+#define FIRMWARE_BUILD_DATE "13 Mar 2026"
 #endif
 
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "v1.14.0"
+#define FIRMWARE_VERSION "v1.14.1-GRID-BETA1"
 #endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
@@ -109,6 +109,8 @@ public:
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
   bool syncRtcFromHeardAdverts(uint32_t& outEstimatedEpoch, uint8_t& outSamples);
   bool addDiscoveredContactById(uint32_t contactId);
+  bool setContactFavoriteById(uint32_t contactId, bool favorite);
+  bool noteExpectedAckForContact(const ContactInfo& contact, uint32_t expectedAck);
 
 #if GRID_OS_BOOT
   // Set the group-send context (threadId + timestamp) before calling sendGroupMessage()

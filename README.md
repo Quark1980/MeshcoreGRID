@@ -1,262 +1,176 @@
 # MeshcoreGRID
 
-MeshcoreGRID is the current touch-screen GUI build built on top of MeshCore. This repository keeps the original MeshCore codebase and capabilities, but the active focus of this branch is the Heltec V4 TFT touch experience named GRID.
+MeshcoreGRID is a touch-first handheld firmware built on MeshCore.
 
-## Current Build Status
+This repository keeps MeshCore as the runtime and protocol source of truth, while GRID provides a full on-device UI layer for chat, discovery, radio controls, BLE controls, settings, and power management.
 
-This build is based on MeshCore 1.14 and adds a screen-driven GUI layer rather than replacing the underlying mesh stack.
+Current testing build line:
 
-What that means in practice:
+- GRID: `v0.7.0-BETA1`
+- Firmware string: `v1.14.1-GRID-BETA1`
 
-- The MeshCore routing, packet handling, LoRa transport, and companion concepts remain the foundation.
-- The current work adds a display-first interface for supported TFT/touch hardware.
-- Existing MeshCore concepts such as channels, direct messages, repeating, and companion connectivity are still relevant.
-- GRID is currently the touch UI shell and chat experience layered onto the MeshCore firmware base.
+## Project Focus
 
-## What Has Been Added In MeshcoreGRID
+MeshcoreGRID focuses on a practical, standalone touchscreen mesh handheld experience.
 
-The current MeshcoreGRID work focuses on the Heltec V4 TFT BLE target and a touch-friendly operating layer.
+Key goals:
 
-Current implemented direction includes:
+- Keep MeshCore transport and persistence behavior intact.
+- Keep UI state in GRID, persistent mesh state in MeshCore.
+- Make daily device usage possible without companion app dependency.
 
-- App-drawer style launcher
-- Screen-based navigation and window management
-- Touch-capable GUI shell for the Heltec V4 TFT
-- Messenger/chat workflow for channels and direct messages
-- On-device compose flow with keyboard and send action
-- Live unread badge support for chat
-- Compact message bubble layout with sender and hop metadata
-- Echo merge support for locally-sent messages with heard/repeat tracking
-- Integration with the existing MeshCore transport and companion-radio flow
-- Battery ADC reading (GPIO37 conflict with TFT MISO resolved; MISO disabled as display is write-only)
-- Permanent wake toast for "RX while screen off" packet counts, shown above the bottom navigation bar
-- Contacts screen shows name (left) and last-heard clock time (right) per row with guaranteed no overlap
-- Long-press any contact to view full advert metadata: public key, type, flags, path length, GPS position, advert and sync timestamps
-- Sort contacts by **Recent** (last heard, newest first) or **Name** (alphabetical), accessible from the right-nav action
-- Channel list automatically hides unnamed placeholder entries that normalise to the bare word "channel"
-- Nodes screen lists only adverts heard during the current boot session
-- Radio screen includes manual **Advert Zero-Hop** and **Advert Flood** actions
-- BLE screen shows the active generated PIN, BLE enabled state, and live connection state
+## Upstream MeshCore
 
-This is not a brand new protocol or a separate mesh implementation. It is MeshCore with an added GUI layer and screen workflow.
+MeshcoreGRID is based on MeshCore.
 
-## About MeshCore
+- Upstream project: https://github.com/meshcore-dev/MeshCore
 
-MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
+Credits:
 
-## What MeshCore Is
+- Massive thanks to the MeshCore maintainers and contributors.
+- This GRID project would not exist without their protocol, routing, radio, storage, and device support foundation.
 
-MeshCore supports a range of LoRa devices and can be used as companion firmware, repeater firmware, room server firmware, modem bridge firmware, and embedded application infrastructure.
-
-MeshCore provides the ability to create wireless mesh networks where devices relay messages through intermediate nodes. This is useful in off-grid, emergency, field, tactical, and infrastructure-poor environments.
-
-Compared with other LoRa networking projects, MeshCore emphasizes lightweight multi-hop routing and embedded flexibility while remaining practical to deploy on real hardware.
-
-## Key Features
-
-- Multi-hop packet routing across embedded LoRa nodes
-- Configurable hop behavior to control network spread and efficiency
-- Fixed-role behavior support, including companion nodes that do not repeat traffic
-- Support for multiple LoRa-capable hardware targets including Heltec, RAK Wireless, and others in the project
-- Decentralized operation with no server or internet requirement
-- Low-power friendly design for battery or solar nodes
-- Example applications that can be built directly from the repository
-
-## What You Can Use It For
-
-- Off-grid communication
-- Emergency response and disaster recovery networking
-- Outdoor and expedition communications
-- Private field communications
-- Embedded telemetry and sensor networks
-- Touch-screen handheld mesh interfaces through MeshcoreGRID
-
-## MeshcoreGRID Targets
-
-The current GUI work is centered on the Heltec V4 TFT touch hardware.
-
-Current relevant target:
+## Supported GRID Target
 
 - `heltec_v4_tft_grid_os_ble`
 
-Related groundwork and status:
+Hardware assumptions for this build:
 
-- Heltec V4 TFT touch hardware support is confirmed using FT6336 (`0x38`) on SDA=5, SCL=6, RST=41.
-- Touch now runs in polling mode on this target to avoid the Heltec V4 GPIO7 conflict with LoRa PA power.
-- The TFT display path and touch plumbing are integrated for GUI operation.
-- GRID is the name of the touch GUI project for MeshcoreGRID.
+- Heltec V4 TFT display
+- FT6336 touch controller (`0x38`) on SDA=5, SCL=6, RST=41
+- LoRa + BLE enabled firmware variant
 
-## GRID Screens And Functions
+## Feature Overview
 
-The current GRID firmware is an app-drawer based handheld UI with a fixed status bar at the top and a fixed navigation bar at the bottom.
+### Global UI
 
-### Shared UI behavior
+- Top status bar with SNR/signal bars, BLE indicator, battery percentage
+- Contextual bottom navbar actions
+- Home screen hides bottom navbar for full-height layout
+- RX-while-screen-off wake toast
+- Screen timeout with persisted value
 
-- Top status bar shows clock, live radio signal bars with SNR text, BLE icon when BLE is enabled, and battery percentage.
-- Bottom navigation bar provides a left **Back** action and a right context action, which defaults to **Home**.
-- Buttons use amber pressed-state feedback for clearer touch confirmation.
-- Screen timeout is configurable in Settings. When the display wakes after sleep, GRID can show a toast above the navbar reporting how many packets were received while the screen was off.
-- LoRa receive stays active while the display is asleep on the Heltec V4 TFT build.
+### Home App
 
-### Home / App Drawer
+- GRID app launcher cards
+- Live unread badge for Messenger
 
-- Main launcher screen for all GRID apps.
-- Shows app cards for Messenger, Nodes, Radio, BLE, Settings, and Power.
-- Displays a live unread badge on the Messenger card when unread chat exists.
+### Messenger App
 
-### Messenger
+- Channel chat + direct-message chat
+- Contacts list from MeshCore memory
+- Manual contact sync button (`Sync`) to refresh GUI list from MeshCore state
+- Favorites filter (`FAV`) for contacts
+- Long-press contact details popup
+- Favorite flag writes to MeshCore contact flags (persistent across reboot)
+- DM delivery state updates:
+  - `* Sent`
+  - `* ACK heard • Delivered`
+- Channel and DM title bars show actual channel/contact names
 
-- Main chat application for channels and direct messages.
-- Channels tab lists available named channels and opens a thread view for channel chat.
-- Contacts tab lists known contacts with left-aligned names and right-aligned last-heard time.
-- Contact sorting toggles between **Recent** and **Name** using the right-nav **Sort** action.
-- Long-press on a contact opens a details popup with advert metadata including public key, flags, GPS position, timestamps, and unread count.
-- Thread view supports incoming and outgoing bubbles, sender labels, hop metadata, local echo merge, and a composer with on-screen keyboard.
+### Discover App
 
-### Nodes
+- Shows adverts heard since boot
+- Empty-state center popup when no adverts
+- Conditional add button for unknown nodes
+- Add button auto-hides once node exists in MeshCore contacts
 
-- Shows only node adverts heard during the current boot session.
-- Does not mirror the persisted contact store.
-- Useful for checking live node discovery activity after boot or after sending adverts.
+### Radio App
 
-### Radio
+- Manual advert actions: zero-hop and flood
+- Metrics view: radio and runtime counters
 
-- Starts on the **Advert** tab.
-- **Advert** tab provides two manual advert actions:
-   - **Advert Zero-Hop** sends the node advert only to neighbor nodes.
-   - **Advert Flood** sends the node advert using flood routing across the mesh.
-- **Metrics** tab shows live radio and runtime values in one screen, including frequency, bandwidth, spreading factor, coding rate, TX power, airtime factor, duty limit, RSSI, SNR, packet count, last raw packet timestamp, RX call count, dispatcher raw-hit count, and received flood/direct counters.
+### BLE App
 
-### BLE
+- Enable/disable BLE
+- Show BLE state and connection state
+- Show active BLE PIN
 
-- Shows whether companion BLE is enabled.
-- Shows the active BLE PIN currently generated from node settings.
-- Shows live connection state as connected or disconnected.
-- Provides a single button to turn BLE on or off.
+### Settings App
 
-### Settings
+- Node name
+- Frequency / BW / SF / CR / TX power
+- BLE PIN
+- Screen timeout
 
-- Editable runtime and node settings screen.
-- Current fields exposed in GRID:
-   - Node Name
-   - Frequency (MHz)
-   - Bandwidth (kHz)
-   - Spreading Factor
-   - Coding Rate
-   - TX Power (dBm)
-   - BLE Pin
-   - Screen Timeout (seconds, `0` for manual-only sleep)
-- Uses an on-screen editor panel and keyboard for field updates.
-- Radio parameter changes are applied immediately and preferences are persisted.
+### Power App
 
-### Power
+- Battery millivolts
+- Reboot
+- Hibernate
 
-- Shows battery voltage in millivolts.
-- **Reboot** restarts the board.
-- **Hibernate** turns off display/radio related hardware and enters deep sleep.
+## Connection Diagram
 
-## How To Get Started
+```mermaid
+flowchart TD
+  PWR[LiPo / USB Power] --> H[Heltec V4 TFT Device]
+  H --> MCU[ESP32-S3 + LoRa Radio]
+  H --> TFT[TFT Display]
+  H --> TOUCH[FT6336 Touch Controller]
+  TOUCH --> I2C[I2C SDA5/SCL6]
+  MCU --> ANT[LoRa Antenna]
+  MCU --> BLE[BLE Companion Link Optional]
+  MCU --> GRID[GRID UI Layer]
+  GRID --> MESHCORE[MeshCore Runtime + Storage]
+  MESHCORE --> RF[Mesh Packet Transport]
+```
 
-If you want to use the current MeshcoreGRID build:
+## Build And Flash
 
-1. Install [PlatformIO](https://docs.platformio.org) in [Visual Studio Code](https://code.visualstudio.com).
-2. Clone this repository.
-3. Open the repository in VS Code.
-4. Build the active GUI target:
-   - `pio run -e heltec_v4_tft_grid_os_ble`
-5. Upload to hardware:
-   - `pio run -e heltec_v4_tft_grid_os_ble -t upload`
+Prerequisites:
 
-If you want to work with the broader MeshCore project as a developer, the original example applications are still present in this repository.
+- VS Code
+- PlatformIO extension
 
-## Developer Examples Still Included
+Commands:
 
-The original MeshCore examples remain available and are still useful reference points:
+1. Build
 
-- [Companion Radio](./examples/companion_radio) - For use with an external chat app over BLE, USB, or WiFi.
-- [KISS Modem](./examples/kiss_modem) - Serial KISS protocol bridge for host applications. See [protocol docs](./docs/kiss_modem_protocol.md).
-- [Simple Repeater](./examples/simple_repeater) - Extends network coverage by relaying messages.
-- [Simple Room Server](./examples/simple_room_server) - A simple BBS-style shared post server.
-- [Simple Secure Chat](./examples/simple_secure_chat) - Terminal-based secure text communication.
-- [Simple Sensor](./examples/simple_sensor) - Remote sensor node with telemetry and alerting.
+```bash
+pio run -e heltec_v4_tft_grid_os_ble
+```
 
-The Simple Secure Chat example can still be used through the VS Code Serial Monitor or another serial terminal.
+2. Flash
 
-## MeshCore Flasher And Clients
+```bash
+pio run -e heltec_v4_tft_grid_os_ble -t upload
+```
 
-The broader MeshCore ecosystem information remains relevant for the non-GUI firmware types and for understanding the upstream project.
+## Precompiled Binary
 
-### MeshCore Flasher
+For quick testing without rebuilding, use:
 
-Prebuilt firmware for supported MeshCore devices is available at:
+- [bin/heltec_v4_tft_grid_os_ble/v0.7.0-BETA1/firmware.bin](bin/heltec_v4_tft_grid_os_ble/v0.7.0-BETA1/firmware.bin)
 
-- https://flasher.meshcore.co.uk
+This binary is built for the `heltec_v4_tft_grid_os_ble` environment.
 
-### MeshCore Clients
+## Changelog
 
-Companion firmware can be connected to via BLE, USB, or WiFi depending on the firmware type.
+### v0.7.0-BETA1
 
-- Web: https://app.meshcore.nz
-- Android: https://play.google.com/store/apps/details?id=com.liamcottle.meshcore.android
-- iOS: https://apps.apple.com/us/app/meshcore/id6742354151?platform=iphone
-- NodeJS: https://github.com/liamcottle/meshcore.js
-- Python: https://github.com/fdlamotte/meshcore-cli
+- Added persistent Favorites using MeshCore contact flag bit (`flags & 0x01`)
+- Added manual contact sync button to refresh GUI list from MeshCore memory
+- Added DM ACK delivery pipeline and status updates (`* ACK heard • Delivered`)
+- Added contextual navbar-left back action and hid navbar on Home
+- Updated chat title to show real channel/contact names instead of generic labels
+- Reworked contact details popup layout and action controls to avoid overlap
+- Improved Discover empty-state behavior and add-button auto-hide logic
+- Updated splash screen pacing/animation and marked build line as BETA
 
-Repeater and room server firmware can be configured via:
+## Repository Structure
 
-- https://config.meshcore.dev
+- [examples/grid_os/main.cpp](examples/grid_os/main.cpp): GRID firmware entry + splash + system loop
+- [src/grid/App_Messenger_Stub.cpp](src/grid/App_Messenger_Stub.cpp): Messenger UI, contacts, DM/channel views
+- [src/grid/App_Modules.cpp](src/grid/App_Modules.cpp): Discover, Radio, BLE, Settings, Power modules
+- [src/grid/WindowManager.cpp](src/grid/WindowManager.cpp): global shell, bars, app switching
+- [examples/companion_radio/MyMesh.cpp](examples/companion_radio/MyMesh.cpp): MeshCore integration and contact persistence path
 
-They can also be managed over LoRa using remote management features in the mobile app.
+## Notes For Testers
 
-## Hardware Compatibility
-
-MeshCore remains designed for devices listed in the MeshCore flasher and the targets included in this repository. MeshcoreGRID specifically focuses on screen-enabled hardware, currently led by the Heltec V4 TFT touch build.
-
-## Project Direction
-
-At this stage, this repository should be understood as:
-
-- MeshCore base: retained
-- MeshCore version basis: 1.14
-- Main active addition: screen + GUI workflow
-- Main active product direction: MeshcoreGRID
-
-The intention is to preserve MeshCore's core behavior while evolving a practical handheld touch interface on supported hardware.
-
-## Contributing
-
-Please submit PRs using `dev` as the base branch when contributing upstream-oriented changes.
-
-General project principles still apply:
-
-- Keep it simple and embedded-focused.
-- Avoid unnecessary abstraction layers.
-- Avoid dynamic allocation outside setup/begin paths unless there is a strong reason.
-- Preserve existing code style in core modules and avoid unrelated reformatting.
-
-## Roadmap / To-Do
-
-There are a number of major features in the pipeline, with no fixed timeframes attached.
-
-- [X] Companion radio: UI redesign
-- [X] GRID UI (Meshcore-Touch): advanced launcher, chat flow, and DMs
-- [X] Repeater + Room Server: add ACLs (like Sensor Node has)
-- [X] Standardize bridge mode for repeaters
-- [ ] Repeater/Bridge: standardize transport codes for zoning/filtering
-- [X] Core + Repeater: enhanced zero-hop neighbor discovery
-- [ ] Core: round-trip manual path support
-- [ ] Companion + Apps: support for multiple sub-meshes and off-grid client repeat mode
-- [ ] Core + Apps: support for LZW message compression
-- [ ] Core: dynamic CR (coding rate) for weak vs strong hops
-- [ ] Core: framework for hosting multiple virtual nodes on one physical device
-- [ ] V2 protocol spec: discussion and consensus around V2 packet protocol, including path hashes and new encryption specs
+- This is a BETA stream build.
+- UI and flow are actively evolving.
+- MeshCore protocol behavior is preserved as much as possible while GRID adds UI capability.
 
 ## License
 
-MeshCore is open-source software released under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
-
-## Get Support
-
-- Report bugs and request features on the [GitHub Issues](https://github.com/ripplebiz/MeshCore/issues) page.
-- Find additional guides and components on [my site](https://buymeacoffee.com/ripplebiz).
-- Join [MeshCore Discord](https://discord.gg/BMwCtwHj5V) to chat with developers and the community.
+MeshCore and MeshcoreGRID are distributed under the MIT License.

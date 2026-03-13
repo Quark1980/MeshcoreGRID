@@ -62,6 +62,7 @@ public:
   using BleToggleHandler = std::function<bool(bool)>;
   using RadioMetricsProvider = std::function<bool(int16_t&, int8_t&)>;
   using AddDiscoveredContactHandler = std::function<bool(uint32_t)>;
+  using SetFavoriteContactHandler = std::function<bool(uint32_t, bool)>;
 
   static MeshBridge& instance();
 
@@ -98,6 +99,7 @@ public:
   void setBleConnectionGetter(BleConnectionGetter getter);
   void setRadioMetricsProvider(RadioMetricsProvider provider);
   void setAddDiscoveredContactHandler(AddDiscoveredContactHandler handler);
+  void setFavoriteContactHandler(SetFavoriteContactHandler handler);
   bool refreshRadioMetrics();
   bool isBleEnabled() const;
   bool isBleConnected() const;
@@ -186,6 +188,7 @@ private:
   BleToggleHandler _bleToggleHandler;
   RadioMetricsProvider _radioMetricsProvider;
   AddDiscoveredContactHandler _addDiscoveredContactHandler;
+  SetFavoriteContactHandler _setFavoriteContactHandler;
 
   bool _threadFilterEnabled;
   uint32_t _threadFilterId;
@@ -198,7 +201,6 @@ private:
   std::map<uint32_t, int> _unreadCounts;
   std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
   std::vector<NodeAdvertSummary> _bootNodeAdverts;
-  std::vector<uint32_t> _favoriteContactIds;
   MeshApp* _activeApp;
 
   // Circular buffer of recently-sent group packet hashes.
