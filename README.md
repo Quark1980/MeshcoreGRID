@@ -6,8 +6,8 @@ This repository keeps MeshCore as the runtime and protocol source of truth, whil
 
 Current testing build line:
 
-- GRID: `v0.7.0-BETA1`
-- Firmware string: `v1.14.1-GRID-BETA1`
+- GRID: `v0.7.1-BETA1`
+- Firmware string: `v1.15.0-GRID-BETA1`
 
 ## Project Focus
 
@@ -140,11 +140,19 @@ pio run -e heltec_v4_tft_grid_os_ble -t upload
 
 For quick testing without rebuilding, use:
 
-- [bin/heltec_v4_tft_grid_os_ble/v0.7.0-BETA1/firmware.bin](bin/heltec_v4_tft_grid_os_ble/v0.7.0-BETA1/firmware.bin)
+- [bin/heltec_v4_tft_grid_os_ble/v0.7.1-BETA1/firmware.bin](bin/heltec_v4_tft_grid_os_ble/v0.7.1-BETA1/firmware.bin)
 
 This binary is built for the `heltec_v4_tft_grid_os_ble` environment.
 
 ## Changelog
+
+
+### v0.7.1-BETA1
+
+- MAP app: scale bar overlay, overlay zoom controls, pinch-to-zoom, and node culling improvements
+- MAP app: zoom range now 10m (min) to 200km (max)
+- MAP app: only overlay zoom controls remain (toolbar zoom removed)
+- General: build, flash, and runtime stability improvements
 
 ### v0.7.0-BETA1
 

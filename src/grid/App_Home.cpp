@@ -30,7 +30,7 @@ public:
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 10, 0);
 
-    static lv_coord_t col[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t col[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row[] = {86, 86, 86, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_layout(grid, LV_LAYOUT_GRID);
     lv_obj_set_grid_dsc_array(grid, col, row);
@@ -45,10 +45,10 @@ public:
       lv_obj_t* card = lv_btn_create(grid);
       lv_obj_set_grid_cell(card,
                            LV_GRID_ALIGN_STRETCH,
-                           visibleIdx % 2,
+                           visibleIdx % 3,
                            1,
                            LV_GRID_ALIGN_STRETCH,
-                           (visibleIdx / 2) % 3,
+                           visibleIdx / 3,
                            1);
       lv_obj_set_style_radius(card, 14, 0);
       lv_obj_set_style_bg_color(card, lv_color_hex(0x1A1F27), 0);

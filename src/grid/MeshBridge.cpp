@@ -38,6 +38,7 @@ MeshBridge::MeshBridge()
       _lastRssi(-127),
       _lastSnr(0),
       _activeApp(nullptr),
+      _pendingContactDetailsId(0),
       _sentGroupHashHead(0) {
   memset(_sentGroupHashes, 0, sizeof(_sentGroupHashes));
 }
@@ -385,6 +386,23 @@ bool MeshBridge::toggleFavoriteContact(uint32_t id) {
   const bool isFav = isFavoriteContact(id);
   setFavoriteContact(id, !isFav);
   return !isFav;
+}
+
+bool MeshBridge::requestContactDetails(uint32_t id) {
+  if (id == 0) {
+    return false;
+  }
+  _pendingContactDetailsId = id;
+  return true;
+}
+
+bool MeshBridge::consumePendingContactDetails(uint32_t& outId) {
+  if (_pendingContactDetailsId == 0) {
+    return false;
+  }
+  outId = _pendingContactDetailsId;
+  _pendingContactDetailsId = 0;
+  return true;
 }
 
 void MeshBridge::setThreadFilter(uint32_t id, bool isPrivate) {

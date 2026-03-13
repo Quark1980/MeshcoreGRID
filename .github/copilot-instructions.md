@@ -33,6 +33,15 @@ For all feature work, fixes, UI integrations, storage changes, protocol handling
 - Keep protocol compatibility with upstream MeshCore whenever possible.
 - If a new GRID-specific layer is required, keep it UI-focused and thin over the MeshCore base.
 
+## App structure rule
+
+For GRID UI application modules (for example Messenger, Discover, MAP, Radio, Settings):
+
+- Keep each app in its own dedicated source file to make iteration and maintenance easier.
+- Prefer file names following the App_<Name> pattern (for example App_Map.cpp).
+- Avoid embedding full app implementations into unrelated multi-app files, except for temporary scaffolding.
+- Keep shared utilities in separate helpers and keep app files focused on that app's UI behavior.
+
 ## Decision rule
 
 Before implementing a new feature, first answer:

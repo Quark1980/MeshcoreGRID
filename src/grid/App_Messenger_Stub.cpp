@@ -188,6 +188,20 @@ public:
   }
 
   void onLoop() override {
+    if (_bridge != nullptr) {
+      uint32_t requestedContactId = 0;
+      if (_bridge->consumePendingContactDetails(requestedContactId) && requestedContactId != 0) {
+        if (_inThread) {
+          backToLanding();
+        }
+        if (_tabview != nullptr) {
+          lv_tabview_set_act(_tabview, 1, LV_ANIM_OFF);
+        }
+        _contactsLoaded = true;
+        refreshContactList();
+        showContactDetails(requestedContactId);
+      }
+    }
     (void)_lastRefresh;
   }
 
@@ -621,42 +635,61 @@ private:
   }
 
   void showContactDetails(uint32_t contactId) {
-    const MeshBridge::ContactSummary* contact = findVisibleContact(contactId);
-    if (contact == nullptr || _bridge == nullptr) {
+    if (_bridge == nullptr) {
       return;
+    }
+
+    MeshBridge::ContactSummary contactInfo{};
+    const MeshBridge::ContactSummary* visible = findVisibleContact(contactId);
+    if (visible != nullptr) {
+      contactInfo = *visible;
+    } else {
+      bool found = false;
+      auto contacts = _bridge->getContacts();
+      for (const auto& contact : contacts) {
+        if (contact.id != contactId) {
+          continue;
+        }
+        contactInfo = contact;
+        found = true;
+        break;
+      }
+      if (!found) {
+        return;
+      }
     }
 
     closeContactDetails();
 
     char latText[24];
     char lonText[24];
-    if (contact->gpsLat == 0 && contact->gpsLon == 0) {
+    if (contactInfo.gpsLat == 0 && contactInfo.gpsLon == 0) {
       snprintf(latText, sizeof(latText), "unknown");
       snprintf(lonText, sizeof(lonText), "unknown");
     } else {
-      snprintf(latText, sizeof(latText), "%.6f", static_cast<double>(contact->gpsLat) / 1000000.0);
-      snprintf(lonText, sizeof(lonText), "%.6f", static_cast<double>(contact->gpsLon) / 1000000.0);
+      snprintf(latText, sizeof(latText), "%.6f", static_cast<double>(contactInfo.gpsLat) / 1000000.0);
+      snprintf(lonText, sizeof(lonText), "%.6f", static_cast<double>(contactInfo.gpsLon) / 1000000.0);
     }
 
     char details[900];
     snprintf(details,
              sizeof(details),
              "Name: %s\nAddress: 0x%08lX\nLast heard: %s ago\nAdvert timestamp (remote epoch): %lu\nPosition: lat %s, lon %s\nType: %u\nFlags: 0x%02X\nOut path len: %u\nSync since: %lu\nRecently heard: %s\nUnread: %d",
-             contact->name.c_str(),
-             static_cast<unsigned long>(contact->id),
-             relativeAge(contact->lastSeen),
-             static_cast<unsigned long>(contact->lastAdvertTimestamp),
+             contactInfo.name.c_str(),
+             static_cast<unsigned long>(contactInfo.id),
+             relativeAge(contactInfo.lastSeen),
+             static_cast<unsigned long>(contactInfo.lastAdvertTimestamp),
              latText,
              lonText,
-             static_cast<unsigned>(contact->type),
-             static_cast<unsigned>(contact->flags),
-             static_cast<unsigned>(contact->outPathLen),
-             static_cast<unsigned long>(contact->syncSince),
-             contact->heardRecently ? "yes" : "no",
-             _bridge->getUnreadCount(contact->id, true));
+             static_cast<unsigned>(contactInfo.type),
+             static_cast<unsigned>(contactInfo.flags),
+             static_cast<unsigned>(contactInfo.outPathLen),
+             static_cast<unsigned long>(contactInfo.syncSince),
+             contactInfo.heardRecently ? "yes" : "no",
+             _bridge->getUnreadCount(contactInfo.id, true));
 
     _contactDetailsPopup = lv_obj_create(lv_layer_top());
-    _detailsContactId = contact->id;
+    _detailsContactId = contactInfo.id;
     lv_obj_set_size(_contactDetailsPopup, LV_PCT(94), LV_PCT(88));
     lv_obj_center(_contactDetailsPopup);
     lv_obj_set_style_bg_color(_contactDetailsPopup, lv_color_hex(0x0F141B), 0);
@@ -696,7 +729,7 @@ private:
 
     _detailsFavCheckbox = lv_checkbox_create(content);
     lv_checkbox_set_text(_detailsFavCheckbox, "Favorite contact");
-    if (_bridge->isFavoriteContact(contact->id)) {
+    if (_bridge->isFavoriteContact(contactInfo.id)) {
       lv_obj_add_state(_detailsFavCheckbox, LV_STATE_CHECKED);
     }
     lv_obj_add_event_cb(_detailsFavCheckbox, onFavoriteCheckboxChanged, LV_EVENT_VALUE_CHANGED, this);
@@ -717,7 +750,7 @@ private:
     lv_obj_add_event_cb(favBtn, onDetailsFavoriteClicked, LV_EVENT_CLICKED, this);
     _detailsFavActionLabel = lv_label_create(favBtn);
     lv_label_set_text(_detailsFavActionLabel,
-                      _bridge->isFavoriteContact(contact->id) ? "Unmark Favorite" : "Mark Favorite");
+                      _bridge->isFavoriteContact(contactInfo.id) ? "Unmark Favorite" : "Mark Favorite");
     lv_obj_center(_detailsFavActionLabel);
 
     lv_obj_t* closeBtn = lv_btn_create(actionBar);

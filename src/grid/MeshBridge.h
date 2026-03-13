@@ -115,6 +115,8 @@ public:
   bool isFavoriteContact(uint32_t id) const;
   bool setFavoriteContact(uint32_t id, bool favorite);
   bool toggleFavoriteContact(uint32_t id);
+  bool requestContactDetails(uint32_t id);
+  bool consumePendingContactDetails(uint32_t& outId);
 
   void setThreadFilter(uint32_t id, bool isPrivate);
   void clearThreadFilter();
@@ -202,6 +204,7 @@ private:
   std::map<uint32_t, std::vector<MeshMessage>> _threadHistory;
   std::vector<NodeAdvertSummary> _bootNodeAdverts;
   MeshApp* _activeApp;
+  uint32_t _pendingContactDetailsId;
 
   // Circular buffer of recently-sent group packet hashes.
   // Accessed only from the mesh task — no locking required.

@@ -2,6 +2,7 @@
 #include <SPIFFS.h>
 #include <TFT_eSPI.h>
 #include <Wire.h>
+#include <cmath>
 #include <cstring>
 #include <lvgl.h>
 
@@ -75,6 +76,71 @@ uint32_t gLastPacketCountObserved = 0;
 uint32_t gRxWhileScreenOffCount = 0;
 uint32_t gRxDebugHideAtMs = 0;
 lv_obj_t* gRxDebugLabel = nullptr;
+float gMapPinchPendingScale = 1.0f;
+bool gMapPinchPending = false;
+float gLastPinchDistance = 0.0f;
+bool gPinchTracking = false;
+
+struct TouchSample {
+  uint8_t touches = 0;
+  int16_t x1 = 0;
+  int16_t y1 = 0;
+  int16_t x2 = 0;
+  int16_t y2 = 0;
+  bool hasPrimary = false;
+  bool hasSecondary = false;
+};
+
+void mapTouchToScreen(int16_t rawX, int16_t rawY, int16_t& outX, int16_t& outY) {
+  int16_t tx = TOUCH_SWAP_XY ? rawY : rawX;
+  int16_t ty = TOUCH_SWAP_XY ? rawX : rawY;
+
+  tx = map(tx, TOUCH_RAW_X_MIN, TOUCH_RAW_X_MAX, 0, 319);
+  ty = map(ty, TOUCH_RAW_Y_MIN, TOUCH_RAW_Y_MAX, 0, 479);
+
+  if (TOUCH_INVERT_X) {
+    tx = 319 - tx;
+  }
+  if (TOUCH_INVERT_Y) {
+    ty = 479 - ty;
+  }
+
+  outX = constrain(tx, 0, 319);
+  outY = constrain(ty, 0, 479);
+}
+
+void updatePinchTracking(const TouchSample& sample) {
+  if (!sample.hasPrimary || !sample.hasSecondary || sample.touches < 2) {
+    gPinchTracking = false;
+    gLastPinchDistance = 0.0f;
+    return;
+  }
+
+  const float dx = static_cast<float>(sample.x2 - sample.x1);
+  const float dy = static_cast<float>(sample.y2 - sample.y1);
+  const float dist = sqrtf(dx * dx + dy * dy);
+
+  if (!gPinchTracking) {
+    gPinchTracking = true;
+    gLastPinchDistance = dist;
+    return;
+  }
+
+  if (gLastPinchDistance < 12.0f || dist < 12.0f) {
+    gLastPinchDistance = dist;
+    return;
+  }
+
+  float ratio = dist / gLastPinchDistance;
+  ratio = constrain(ratio, 0.75f, 1.25f);
+
+  if (ratio > 1.025f || ratio < 0.975f) {
+    gMapPinchPendingScale = ratio;
+    gMapPinchPending = true;
+  }
+
+  gLastPinchDistance = dist;
+}
 
 void ensureRxDebugLabel() {
   if (gRxDebugLabel != nullptr) {
@@ -276,7 +342,7 @@ void lvglFlush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) 
   lv_disp_flush_ready(disp);
 }
 
-bool readTouchPoint(int16_t* x, int16_t* y) {
+bool readTouchSample(TouchSample* out) {
   if (!touchReady) {
     return false;
   }
@@ -304,46 +370,48 @@ bool readTouchPoint(int16_t* x, int16_t* y) {
     return false;
   }
 
-  touchWire.requestFrom((uint16_t)touchAddr, (uint8_t)5, true);
-  if (touchWire.available() < 5) {
+  touchWire.requestFrom((uint16_t)touchAddr, (uint8_t)11, true);
+  if (touchWire.available() < 11) {
     logTouchError("short-read");
     return false;
   }
 
   uint8_t touches = touchWire.read() & 0x0F;
-  uint8_t x_high = touchWire.read();
-  uint8_t x_low = touchWire.read();
-  uint8_t y_high = touchWire.read();
-  uint8_t y_low = touchWire.read();
+  uint8_t x1_high = touchWire.read();
+  uint8_t x1_low = touchWire.read();
+  uint8_t y1_high = touchWire.read();
+  uint8_t y1_low = touchWire.read();
+  (void)touchWire.read();
+  (void)touchWire.read();
+  uint8_t x2_high = touchWire.read();
+  uint8_t x2_low = touchWire.read();
+  uint8_t y2_high = touchWire.read();
+  uint8_t y2_low = touchWire.read();
 
-  if (touches == 0 || x == nullptr || y == nullptr) {
+  if (touches == 0 || out == nullptr) {
     if (digitalRead(TOUCH_INT) == HIGH) {
       touchIrqPending = false;
     }
+    gPinchTracking = false;
+    gLastPinchDistance = 0.0f;
     return false;
   }
 
-  int16_t rawX = ((x_high & 0x0F) << 8) | x_low;
-  int16_t rawY = ((y_high & 0x0F) << 8) | y_low;
+  out->touches = touches;
+  out->hasPrimary = false;
+  out->hasSecondary = false;
 
-  int16_t tx = TOUCH_SWAP_XY ? rawY : rawX;
-  int16_t ty = TOUCH_SWAP_XY ? rawX : rawY;
+  const int16_t rawX1 = ((x1_high & 0x0F) << 8) | x1_low;
+  const int16_t rawY1 = ((y1_high & 0x0F) << 8) | y1_low;
+  mapTouchToScreen(rawX1, rawY1, out->x1, out->y1);
+  out->hasPrimary = true;
 
-  tx = map(tx, TOUCH_RAW_X_MIN, TOUCH_RAW_X_MAX, 0, 319);
-  ty = map(ty, TOUCH_RAW_Y_MIN, TOUCH_RAW_Y_MAX, 0, 479);
-
-  if (TOUCH_INVERT_X) {
-    tx = 319 - tx;
+  if (touches >= 2) {
+    const int16_t rawX2 = ((x2_high & 0x0F) << 8) | x2_low;
+    const int16_t rawY2 = ((y2_high & 0x0F) << 8) | y2_low;
+    mapTouchToScreen(rawX2, rawY2, out->x2, out->y2);
+    out->hasSecondary = true;
   }
-  if (TOUCH_INVERT_Y) {
-    ty = 479 - ty;
-  }
-
-  tx = constrain(tx, 0, 319);
-  ty = constrain(ty, 0, 479);
-
-  *x = tx;
-  *y = ty;
 
   if (digitalRead(TOUCH_INT) == HIGH) {
     touchIrqPending = false;
@@ -390,9 +458,8 @@ void reinitTouchController() {
 
 void lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
   (void)drv;
-  int16_t x = 0;
-  int16_t y = 0;
-  if (readTouchPoint(&x, &y)) {
+  TouchSample sample;
+  if (readTouchSample(&sample)) {
     if (gDisplaySleeping) {
       noteInteraction();
       data->state = LV_INDEV_STATE_REL;
@@ -400,10 +467,11 @@ void lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
       return;
     }
 
+    updatePinchTracking(sample);
     noteInteraction();
     data->state = LV_INDEV_STATE_PR;
-    data->point.x = x;
-    data->point.y = y;
+    data->point.x = sample.x1;
+    data->point.y = sample.y1;
   } else {
     data->state = LV_INDEV_STATE_REL;
   }
@@ -579,6 +647,15 @@ void loadScreenTimeoutSec() {
 
 void saveScreenTimeoutSec() {
   saveScreenTimeoutSecInternal();
+}
+
+bool consumeMapPinchScale(float& outScale) {
+  if (!gMapPinchPending) {
+    return false;
+  }
+  gMapPinchPending = false;
+  outScale = gMapPinchPendingScale;
+  return true;
 }
 
 }  // namespace grid::runtime
@@ -796,6 +873,7 @@ void setup() {
   registerHomeApp(wm);
   registerChatApp(wm, bridge);
   registerNodesApp(wm, bridge);
+  registerMapApp(wm, bridge);
   registerRadioApp(wm);
 #ifdef BLE_PIN_CODE
   registerBleApp(wm);
