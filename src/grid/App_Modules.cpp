@@ -138,30 +138,25 @@ public:
     renderAdvertsNewestFirst();
   }
 private:
-  static void onAddNodePopup(lv_event_t* e) {
+  static void onAddNodeClicked(lv_event_t* e) {
     auto* self = static_cast<NodesApp*>(lv_event_get_user_data(e));
     if (!self || !self->_bridge) return;
-    lv_obj_t* row = lv_event_get_target(e);
-    uint32_t contactId = reinterpret_cast<uint32_t>(lv_obj_get_user_data(row));
-    // Create a simple popup menu for Add
-    static const char* btns[] = {"Add", "Cancel", "", NULL};
-    lv_obj_t* mbox = lv_msgbox_create(NULL, "Add Contact", "Add this node to contacts?", btns, false);
+    lv_obj_t* btn = lv_event_get_target(e);
+    uint32_t contactId = reinterpret_cast<uint32_t>(lv_obj_get_user_data(btn));
+    self->_bridge->addDiscoveredContactById(contactId);
+    self->renderAdvertsNewestFirst();
+    // Hide or delete _emptyPopup if visible to prevent double popups
+    if (self->_emptyPopup != nullptr) {
+      lv_obj_add_flag(self->_emptyPopup, LV_OBJ_FLAG_HIDDEN);
+    }
+    // Show confirmation popup (LVGL 8.x: pass btns to create)
+    static const char* btns[] = {"Dismiss", NULL};
+    lv_obj_t* mbox = lv_msgbox_create(NULL, "Contact Added", "Node added to contacts!", btns, false);
     lv_obj_center(mbox);
-    // Store contactId in msgbox user data
-    lv_obj_set_user_data(mbox, reinterpret_cast<void*>(contactId));
     lv_obj_add_event_cb(mbox, [](lv_event_t* e2) {
       lv_obj_t* mbox = lv_event_get_target(e2);
-      uint32_t cid = reinterpret_cast<uint32_t>(lv_obj_get_user_data(mbox));
-      uint32_t btn_id = lv_msgbox_get_active_btn(mbox);
-      if (btn_id == 0) { // Add
-        auto* self2 = static_cast<NodesApp*>(lv_event_get_user_data(e2));
-        if (self2 && self2->_bridge) {
-          self2->_bridge->addDiscoveredContactById(cid);
-          self2->renderAdvertsNewestFirst();
-        }
-      }
       lv_obj_del(mbox);
-    }, LV_EVENT_VALUE_CHANGED, self);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
   }
 
   const char* relativeAdvertAge(uint32_t ts) const {
@@ -199,11 +194,10 @@ private:
     lv_obj_remove_style_all(row);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
-    lv_obj_set_style_radius(row, 12, 0);
-    lv_obj_set_style_border_width(row, 1, 0);
-    lv_obj_set_style_border_color(row, lv_color_hex(0x263040), 0);
+    // Remove all box/border styling, keep only padding for finger-friendly touch
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_radius(row, 0, 0);
     lv_obj_set_style_pad_left(row, 12, 0);
     lv_obj_set_style_pad_right(row, 12, 0);
     lv_obj_set_style_pad_top(row, 10, 0);
@@ -221,8 +215,8 @@ private:
     lv_obj_t* nameLabel = lv_label_create(left);
     const char* label = advert.text.empty() ? "(unnamed advert)" : advert.text.c_str();
     lv_label_set_text(nameLabel, label);
-    lv_obj_set_style_text_color(nameLabel, lv_color_hex(0xEDF4FF), 0);
-    lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_14, 0);
+    // Default text color
+    lv_color_t nameColor = lv_color_hex(0xEDF4FF);
 
     lv_obj_t* ageLabel = lv_label_create(left);
     char ageText[40];
@@ -231,17 +225,21 @@ private:
     lv_obj_set_style_text_color(ageLabel, lv_color_hex(0xAFC2D8), 0);
     lv_obj_set_style_text_font(ageLabel, &lv_font_montserrat_12, 0);
 
-    // Highlight addable rows and add long-press popup
+    // Add button for addable nodes
     if (_bridge != nullptr && advert.contactId != 0 && !_bridge->hasContact(advert.contactId)) {
-      // Highlight: blue border and background
-      lv_obj_set_style_border_color(row, lv_color_hex(0x2B7FFF), 0);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x182B3F), 0);
-      // Make row clickable for long-press
-      lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
-      // Store contactId in user data for popup
-      lv_obj_set_user_data(row, reinterpret_cast<void*>(advert.contactId));
-      lv_obj_add_event_cb(row, onAddNodePopup, LV_EVENT_LONG_PRESSED, this);
+      nameColor = lv_color_hex(0x2B7FFF); // blue for addable
+      lv_obj_t* addBtn = lv_btn_create(row);
+      lv_obj_set_size(addBtn, 56, 30);
+      lv_obj_set_style_bg_color(addBtn, lv_color_hex(0x2B7FFF), 0);
+      lv_obj_set_style_bg_color(addBtn, lv_color_hex(0x1F63C6), LV_STATE_PRESSED);
+      lv_obj_set_style_radius(addBtn, 8, 0);
+      lv_obj_set_user_data(addBtn, reinterpret_cast<void*>(advert.contactId));
+      lv_obj_add_event_cb(addBtn, onAddNodeClicked, LV_EVENT_CLICKED, this);
+      lv_obj_t* addLbl = lv_label_create(addBtn);
+      lv_label_set_text(addLbl, "Add");
+      lv_obj_center(addLbl);
     }
+    lv_obj_set_style_text_color(nameLabel, nameColor, 0);
   }
 
   void populateBootAdverts() {
@@ -276,9 +274,13 @@ private:
                                                       const MeshBridge::NodeAdvertSummary& b) {
       return a.timestamp > b.timestamp;
     });
-
+    // Only show the 20 newest (FIFO: newest on top)
+    size_t maxNodes = 20;
+    size_t count = 0;
     for (const auto& advert : sorted) {
+      if (count >= maxNodes) break;
       addNodeCard(advert);
+      ++count;
     }
     _showingEmptyState = false;
     updateCountLabel();

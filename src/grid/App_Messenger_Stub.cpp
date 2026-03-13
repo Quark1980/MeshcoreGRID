@@ -1157,11 +1157,10 @@ private:
       snprintf(label, sizeof(label), "%s", visibleChannelLabel(normalizedName, channel.name));
 
       lv_obj_t* row = lv_list_add_btn(_channelsList, LV_SYMBOL_LIST, label);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
-      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-      lv_obj_set_style_radius(row, 12, 0);
-      lv_obj_set_style_border_width(row, 1, 0);
-      lv_obj_set_style_border_color(row, lv_color_hex(0x263040), 0);
+      // Boxless, finger-friendly style for channel list row
+      lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+      lv_obj_set_style_border_width(row, 0, 0);
+      lv_obj_set_style_radius(row, 0, 0);
       lv_obj_set_style_pad_left(row, 12, 0);
       lv_obj_set_style_pad_right(row, 34, 0);
       lv_obj_set_style_pad_top(row, 10, 0);
@@ -1348,16 +1347,15 @@ private:
       if (shown >= kMaxRows) {
         break;
       }
-      // Use a plain container instead of lv_list_add_btn so no inherited
-      // lv_btn / list-button theme styles fight with our flex layout.
+      // Use a plain container for the row
       lv_obj_t* row = lv_obj_create(_contactsList);
       lv_obj_remove_style_all(row);
       lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
       lv_obj_add_flag(row, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
       lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
-      lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x1A2532), 0);
-      lv_obj_set_style_bg_color(row, lv_color_hex(0x253447), LV_STATE_PRESSED);
+      lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+      lv_obj_set_style_border_width(row, 0, 0);
+      lv_obj_set_style_radius(row, 0, 0);
       lv_obj_set_style_pad_left(row, 12, 0);
       lv_obj_set_style_pad_right(row, 12, 0);
       lv_obj_set_style_pad_top(row, 10, 0);
@@ -1365,31 +1363,37 @@ private:
       lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
       lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-      lv_obj_t* nameLabel = lv_label_create(row);
+      // Left column: name and last heard (vertical)
+      lv_obj_t* left = lv_obj_create(row);
+      lv_obj_remove_style_all(left);
+      lv_obj_set_flex_grow(left, 1);
+      lv_obj_set_height(left, LV_SIZE_CONTENT);
+      lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+      lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+      lv_obj_t* nameLabel = lv_label_create(left);
       lv_label_set_text(nameLabel, contact.name.c_str());
       lv_label_set_long_mode(nameLabel, LV_LABEL_LONG_CLIP);
-      lv_obj_set_flex_grow(nameLabel, 1);
       lv_obj_set_style_text_align(nameLabel, LV_TEXT_ALIGN_LEFT, 0);
       lv_obj_set_style_text_color(nameLabel, lv_color_hex(0xEDF4FF), 0);
       lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_14, 0);
 
-      lv_obj_t* timeLabel = lv_label_create(row);
-      char timeText[28];
-      if (_contactSortMode == ContactSortMode::LastSeen && contact.lastSeen != 0) {
-        snprintf(timeText, sizeof(timeText), "%s ago", relativeAge(contact.lastSeen));
+      // Last heard (smaller, under name)
+      lv_obj_t* lastHeardLabel = lv_label_create(left);
+      char lastHeardText[32];
+      if (contact.lastSeen != 0) {
+        snprintf(lastHeardText, sizeof(lastHeardText), "heard %s ago", relativeAge(contact.lastSeen));
       } else {
-        snprintf(timeText, sizeof(timeText), "%s", formatClockTime(contact.lastSeen));
+        snprintf(lastHeardText, sizeof(lastHeardText), "never heard");
       }
-      lv_label_set_text(timeLabel, timeText);
-      lv_obj_set_width(timeLabel, 92);
-      lv_obj_set_style_text_align(timeLabel, LV_TEXT_ALIGN_RIGHT, 0);
-      lv_obj_set_style_text_color(timeLabel, lv_color_hex(0xAFC2D8), 0);
-      lv_obj_set_style_text_font(timeLabel, &lv_font_montserrat_14, 0);
+      lv_label_set_text(lastHeardLabel, lastHeardText);
+      lv_obj_set_style_text_color(lastHeardLabel, lv_color_hex(0xAFC2D8), 0);
+      lv_obj_set_style_text_font(lastHeardLabel, &lv_font_montserrat_12, 0);
+      lv_obj_set_style_text_align(lastHeardLabel, LV_TEXT_ALIGN_LEFT, 0);
 
-      if (contact.heardRecently) {
-        lv_obj_set_style_border_color(row, lv_color_hex(0x27D468), 0);
-        lv_obj_set_style_border_width(row, 1, 0);
-      }
+      // Unread badge (right side)
+      int unread = _bridge->getUnreadCount(contact.id, false);
+      addUnreadBadge(row, unread);
 
       _rowBindings.push_back({row, contact.id, true});
       _visibleContacts.push_back(contact);
