@@ -23,6 +23,7 @@ public:
     lv_obj_t* title = lv_label_create(layout);
     lv_label_set_text(title, "Nodes Heard");
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xEDF4FF), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 14, 12);
 
     _countLabel = lv_label_create(layout);
@@ -33,6 +34,10 @@ public:
     _list = lv_list_create(layout);
     lv_obj_set_size(_list, LV_PCT(100), LV_PCT(86));
     lv_obj_align(_list, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(_list, lv_color_hex(0x101820), 0);
+    lv_obj_set_style_bg_opa(_list, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(_list, 0, 0);
+    lv_obj_set_scrollbar_mode(_list, LV_SCROLLBAR_MODE_AUTO);
 
     populateBootAdverts();
 
@@ -56,10 +61,20 @@ public:
     }
 
     const char* label = msg.text.empty() ? "(unnamed advert)" : msg.text.c_str();
-    lv_list_add_text(_list, label);
+    addNodeListText(label);
     updateCountLabel();
   }
 private:
+  void addNodeListText(const char* text) {
+    if (_list == nullptr || text == nullptr) {
+      return;
+    }
+
+    lv_obj_t* item = lv_list_add_text(_list, text);
+    lv_obj_set_style_text_color(item, lv_color_hex(0xEDF4FF), 0);
+    lv_obj_set_style_text_font(item, &lv_font_montserrat_14, 0);
+  }
+
   void populateBootAdverts() {
     if (_list == nullptr || _bridge == nullptr) {
       return;
@@ -67,7 +82,7 @@ private:
 
     const auto adverts = _bridge->getBootNodeAdverts();
     if (adverts.empty()) {
-      lv_list_add_text(_list, "No adverts heard this boot");
+      addNodeListText("No adverts heard this boot");
       _showingEmptyState = true;
       updateCountLabel();
       return;
@@ -75,7 +90,7 @@ private:
 
     for (const auto& advert : adverts) {
       const char* label = advert.text.empty() ? "(unnamed advert)" : advert.text.c_str();
-      lv_list_add_text(_list, label);
+      addNodeListText(label);
     }
     _showingEmptyState = false;
     updateCountLabel();
