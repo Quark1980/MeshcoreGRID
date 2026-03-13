@@ -455,7 +455,7 @@ public:
 
     _syncClockBtn = lv_btn_create(layout);
     lv_obj_set_size(_syncClockBtn, 118, 30);
-    lv_obj_align(_syncClockBtn, LV_ALIGN_TOP_RIGHT, -14, 38);
+    lv_obj_align(_syncClockBtn, LV_ALIGN_TOP_RIGHT, -14, 10);
     lv_obj_set_style_bg_color(_syncClockBtn, lv_color_hex(0x2F6DF6), 0);
     lv_obj_add_event_cb(_syncClockBtn, onSyncClockClicked, LV_EVENT_CLICKED, this);
     lv_obj_t* syncLbl = lv_label_create(_syncClockBtn);
